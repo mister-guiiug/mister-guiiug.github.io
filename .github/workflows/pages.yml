@@ -1,0 +1,72 @@
+# Construit et publie la racine de l'origine.
+#
+# ON NE COMMITE RIEN. Les fichiers sont engendrés AU MOMENT DE PUBLIER puis
+# téléversés comme artefact Pages : aucun `git push`, donc la règle
+# `pull_request` du ruleset « Protect main » reste en place. C'est le remède
+# éprouvé sur la vitrine du socle (dev-pwa-config#257) : un workflow qui
+# poussait sur `main` y a échoué chaque nuit du 02/09 au 13/09/2026, en
+# silence, dès que la branche a été protégée.
+#
+# CHAQUE NUIT, parce que la page suit deux sources qui bougent sans passer par
+# ce dépôt : le catalogue du socle (une application naît à chaque version) et
+# la liste des sites publiés (un plan de site apparaît).
+#
+# ÉCHOUER EST SÛR : si la construction échoue — une application ne répond pas,
+# le réseau hoquette —, rien n'est déployé et Pages continue de servir la
+# version précédente. Le job de construction tourne aussi sur les PR, comme
+# vérification, sans publier.
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Deux publications ne doivent pas se croiser ; une publication en cours n'est
+# pas annulée par la suivante, elle se termine.
+concurrency:
+  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'publication' }}
+  cancel-in-progress: false
+
+jobs:
+  construire:
+    name: Construire le site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+
+      - name: Engendrer index.html, robots.txt et sitemap.xml
+        run: node scripts/build-site.mjs _site
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  publier:
+    name: Publier
+    needs: construire
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploiement.outputs.page_url }}
+    steps:
+      - id: deploiement
+        uses: actions/deploy-pages@v5
