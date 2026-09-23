@@ -25,6 +25,11 @@ on:
   schedule:
     - cron: '23 4 * * *'
   workflow_dispatch:
+    inputs:
+      indexnow-tout:
+        description: Signaler TOUTES les URL a IndexNow (premier envoi, reprise)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -62,6 +67,7 @@ jobs:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
@@ -70,3 +76,16 @@ jobs:
     steps:
       - id: deploiement
         uses: actions/deploy-pages@v5
+
+      # IndexNow (Bing, DuckDuckGo, Ecosia, Qwant, Yandex…) : APRÈS la
+      # publication, la clé doit être en ligne pour être vérifiée. Seules les
+      # URL dont le `lastmod` date d'hier ou d'aujourd'hui partent ; un
+      # lancement manuel avec « tout » les envoie toutes. Un échec ici ne
+      # défait rien : le site est déjà publié.
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Signaler les pages modifiées à IndexNow
+        continue-on-error: true
+        run: node scripts/indexnow.mjs ${{ inputs.indexnow-tout && '--tout' || '' }}

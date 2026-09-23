@@ -38,6 +38,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { INDEXNOW_CLE } from './indexnow-cle.mjs';
 
 const SORTIE = process.argv[2] ?? '_site';
 const COMPTE = 'mister-guiiug';
@@ -466,10 +467,13 @@ writeFileSync(
   `google-site-verification: ${VERIFICATION_GOOGLE}`,
   'utf8'
 );
+// La clé IndexNow, servie à la racine : elle couvre toute l'origine (voir
+// scripts/indexnow-cle.mjs). Le fichier ne contient QUE la clé.
+writeFileSync(join(SORTIE, `${INDEXNOW_CLE}.txt`), INDEXNOW_CLE, 'utf8');
 
 console.log(
   `\nÉcrit dans ${SORTIE}/ : index.html (${FAMILY_APPS.length} applications en ` +
     `${sections.length} catégories, ${coulisses.length} en coulisses), ` +
     `robots.txt (${sites.filter(s => s.plan).length + 1} plans de site), sitemap.xml, ` +
-    VERIFICATION_GOOGLE
+    `${VERIFICATION_GOOGLE}, clé IndexNow`
 );
