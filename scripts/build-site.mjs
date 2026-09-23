@@ -1,5 +1,6 @@
 /**
- * Construit le site de la racine — `index.html`, `robots.txt`, `sitemap.xml` —
+ * Construit le site de la racine — `index.html`, `robots.txt`, `sitemap.xml`,
+ * et le fichier de vérification de Search Console —
  * dans un dossier de sortie (`_site` par défaut). Rien n'est commité : le
  * workflow `pages.yml` l'exécute au moment de PUBLIER, chaque nuit et à chaque
  * fusion.
@@ -43,6 +44,22 @@ const COMPTE = 'mister-guiiug';
 const SOCLE = 'dev-pwa-config';
 const SOI = `${COMPTE}.github.io`;
 const JETON = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? '';
+
+/**
+ * LE FICHIER DE VÉRIFICATION DE SEARCH CONSOLE, et pourquoi il vit ici.
+ *
+ * Une seule propriété en PRÉFIXE D'URL, `https://mister-guiiug.github.io/`,
+ * couvre les vingt-deux sites : ils ne sont que des chemins sous cette origine.
+ * La validation par DOMAINE passe par le DNS, impossible sur `github.io` ; reste
+ * un fichier servi À LA RACINE — le seul endroit que ce dépôt, et lui seul,
+ * sert.
+ *
+ * Le nom a été délivré par l'API Site Verification le 23/09/2026 pour le
+ * compte de service `ga4-parc@mister-guiiug.iam.gserviceaccount.com`. Il n'a
+ * rien de secret : Google le lit en clair, comme tout visiteur. Le RETIRER
+ * ferait perdre la propriété — Google revérifie périodiquement.
+ */
+const VERIFICATION_GOOGLE = 'google9caf2e3f1fe44b09.html';
 
 // ---------------------------------------------------------------------------
 // Accès réseau
@@ -189,15 +206,64 @@ ${sites
   .join('\n')}
 `;
 
+// `lastmod` : le seul champ du plan de site que Google lise vraiment
+// (`changefreq` et `priority` sont ignorés). La page change quand le catalogue
+// change, et le catalogue n'arrive ici qu'à la publication : le jour de la
+// construction est donc la bonne date.
+const aujourdhui = new Date().toISOString().slice(0, 10);
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>${FAMILY_ORIGIN}/</loc>
+    <lastmod>${aujourdhui}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
 </urlset>
 `;
+
+// ---------------------------------------------------------------------------
+// Données structurées — le site, et la liste de ses applications
+// ---------------------------------------------------------------------------
+
+/**
+ * Un `WebSite` et un `ItemList` : ce que la page EST (l'accueil d'une famille
+ * d'applications), et ce qu'elle liste. Chaque application porte déjà son
+ * propre `WebApplication` (socle, `pwaSeoPlugin`) ; ici on ne fait que les
+ * nommer et les relier, par leur URL.
+ *
+ * `<` est échappé : une description contenant `</script>` fermerait le bloc.
+ */
+const donneesStructurees = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      '@id': `${FAMILY_ORIGIN}/#site`,
+      name: `Les applications de ${COMPTE}`,
+      url: `${FAMILY_ORIGIN}/`,
+      inLanguage: 'fr',
+      publisher: {
+        '@type': 'Person',
+        name: COMPTE,
+        url: `https://github.com/${COMPTE}`,
+      },
+    },
+    {
+      '@type': 'ItemList',
+      name: `Applications web de ${COMPTE}`,
+      itemListElement: FAMILY_APPS.filter(a => surOrigine(a.appUrl)).map(
+        (a, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          url: a.appUrl,
+          name: a.name,
+        })
+      ),
+    },
+  ],
+};
+const jsonLd = JSON.stringify(donneesStructurees).replace(/</g, '\\u003c');
 
 // ---------------------------------------------------------------------------
 // index.html — groupé par catégorie, dans l'ordre du catalogue
@@ -251,6 +317,7 @@ const html = `<!doctype html>
     <meta property="og:title" content="Les applications de ${COMPTE}" />
     <meta property="og:description" content="${echappe(description)}" />
     <meta property="og:url" content="${FAMILY_ORIGIN}/" />
+    <script type="application/ld+json">${jsonLd}</script>
     <style>
       :root {
         color-scheme: light dark;
@@ -393,9 +460,16 @@ mkdirSync(SORTIE, { recursive: true });
 writeFileSync(join(SORTIE, 'index.html'), html, 'utf8');
 writeFileSync(join(SORTIE, 'robots.txt'), robots, 'utf8');
 writeFileSync(join(SORTIE, 'sitemap.xml'), sitemap, 'utf8');
+// Le contenu exact que Google attend, au caractère près.
+writeFileSync(
+  join(SORTIE, VERIFICATION_GOOGLE),
+  `google-site-verification: ${VERIFICATION_GOOGLE}`,
+  'utf8'
+);
 
 console.log(
   `\nÉcrit dans ${SORTIE}/ : index.html (${FAMILY_APPS.length} applications en ` +
     `${sections.length} catégories, ${coulisses.length} en coulisses), ` +
-    `robots.txt (${sites.filter(s => s.plan).length + 1} plans de site), sitemap.xml`
+    `robots.txt (${sites.filter(s => s.plan).length + 1} plans de site), sitemap.xml, ` +
+    VERIFICATION_GOOGLE
 );
