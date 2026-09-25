@@ -46,6 +46,12 @@ L'API GitHub ne sert plus qu'à ce que le catalogue ignore :
   applications du catalogue. Calculée, jamais écrite à la main — un nouveau site
   d'infrastructure y apparaît de lui-même.
 
+Chaque carte d'application liste aussi ses **pages de contenu** (socle 6.17.0 :
+`content/pages/<slug>.md` → `<slug>.html`), lues dans le plan de site de l'app
+avec leur titre. C'est le lien qui les relie à la seule page du parc déjà
+indexée. L'**image de partage** de la racine est la seule image versionnée :
+`static/og-image.jpg`, la mosaïque des icônes du catalogue.
+
 ## Publication
 
 **Rien n'est commité.** Le workflow [`pages.yml`](.github/workflows/pages.yml)

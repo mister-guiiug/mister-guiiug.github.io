@@ -36,7 +36,8 @@
  * Un `GITHUB_TOKEN` (ou `GH_TOKEN`) dans l'environnement relève la limite de
  * l'API ; sans lui, les deux requêtes passent quand même.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { INDEXNOW_CLE } from './indexnow-cle.mjs';
 
@@ -71,6 +72,19 @@ const VERIFICATION_GOOGLE = 'google9caf2e3f1fe44b09.html';
  */
 const VERIFICATION_BING = 'C186323DB4057177900143ABD890AEC1';
 
+/**
+ * L'image de partage de la racine, 1200×630 : le titre et la mosaïque des
+ * icônes du catalogue. Dessinée une fois le 25/09/2026 et versionnée dans
+ * `static/` ; l'empreinte de son contenu entre dans l'URL, parce que les réseaux
+ * gardent une image en cache par URL. Sans elle, un lien vers le parc partagé
+ * sur une messagerie sortait sans aucune image.
+ */
+const IMAGE_PARTAGE = new URL('../static/og-image.jpg', import.meta.url);
+const IMAGE_EMPREINTE = createHash('sha256')
+  .update(readFileSync(IMAGE_PARTAGE))
+  .digest('hex')
+  .slice(0, 8);
+
 // ---------------------------------------------------------------------------
 // Accès réseau
 // ---------------------------------------------------------------------------
@@ -99,6 +113,36 @@ async function statut(url, essais = 3) {
     await new Promise(ok => setTimeout(ok, 1500 * i));
   }
   return 0;
+}
+
+const ENTITES = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" };
+const decode = t => t.replace(/&(amp|lt|gt|quot|#39);/g, (_, e) => ENTITES[e]);
+
+/**
+ * Les pages de contenu d'une application : les URL de son plan de site autres
+ * que l'accueil, avec le titre (`<h1>`) de chacune. Depuis le socle 6.17.0,
+ * chaque `content/pages/<slug>.md` d'une app devient `<slug>.html` et entre à
+ * son plan de site. Les lister ICI donne à chacune un lien depuis la seule page
+ * du parc déjà indexée. Une page qui ne répond pas est simplement omise.
+ */
+async function pagesDe(appUrl) {
+  try {
+    const r = await fetch(`${appUrl}sitemap.xml`);
+    if (!r.ok) return [];
+    const locs = [...(await r.text()).matchAll(/<loc>([^<]+)<\/loc>/g)]
+      .map(m => decode(m[1]))
+      .filter(u => u !== appUrl && u.startsWith(appUrl));
+    const pages = [];
+    for (const url of locs) {
+      const p = await fetch(url);
+      if (!p.ok) continue;
+      const titre = /<h1[^>]*>([^<]+)<\/h1>/i.exec(await p.text())?.[1]?.trim();
+      if (titre) pages.push({ url, titre: decode(titre) });
+    }
+    return pages;
+  } catch {
+    return [];
+  }
 }
 
 /** Titre annoncé par un site, ou `null`. */
@@ -160,6 +204,8 @@ const surOrigine = url => url.startsWith(`${FAMILY_ORIGIN}/`);
 
 console.log(`${FAMILY_APPS.length} applications au catalogue :`);
 const enPanne = [];
+/** id de l'app → ses pages de contenu. */
+const pagesParApp = new Map();
 for (const app of FAMILY_APPS) {
   // Une application de bureau pointe vers son dépôt : rien à sonder sur Pages.
   if (!surOrigine(app.appUrl)) {
@@ -167,7 +213,12 @@ for (const app of FAMILY_APPS) {
     continue;
   }
   const code = await statut(app.appUrl);
-  console.log(`  ${code === 200 ? '✓' : '✗'} ${app.id.padEnd(20)} ${code}`);
+  const pages = code === 200 ? await pagesDe(app.appUrl) : [];
+  pagesParApp.set(app.id, pages);
+  console.log(
+    `  ${code === 200 ? '✓' : '✗'} ${app.id.padEnd(20)} ${code}` +
+      (pages.length ? ` · ${pages.length} page(s) de contenu` : '')
+  );
   if (code !== 200) enPanne.push(`${app.id} (${code})`);
 }
 if (enPanne.length) {
@@ -286,9 +337,16 @@ const maturite = m =>
 
 const carteApp = app => {
   const bureau = app.platform === 'desktop';
+  const pages = pagesParApp.get(app.id) ?? [];
+  const liste = pages.length
+    ? `
+            <ul class="pages">
+${pages.map(p => `              <li><a href="${echappe(p.url)}">${echappe(p.titre)}</a></li>`).join('\n')}
+            </ul>`
+    : '';
   return `          <li class="carte">
             <h3><a href="${echappe(app.appUrl)}">${echappe(app.name)}</a>${maturite(app.maturity)}${bureau ? ' <span class="badge">Application de bureau</span>' : ''}</h3>
-            <p>${echappe(app.description)}</p>
+            <p>${echappe(app.description)}</p>${liste}
           </li>`;
 };
 
@@ -327,6 +385,13 @@ const html = `<!doctype html>
     <meta property="og:title" content="Les applications de ${COMPTE}" />
     <meta property="og:description" content="${echappe(description)}" />
     <meta property="og:url" content="${FAMILY_ORIGIN}/" />
+    <meta property="og:image" content="${FAMILY_ORIGIN}/og-image.jpg?v=${IMAGE_EMPREINTE}" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Les applications de ${COMPTE} : leurs icônes, en mosaïque" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="${FAMILY_ORIGIN}/og-image.jpg?v=${IMAGE_EMPREINTE}" />
     <script type="application/ld+json">${jsonLd}</script>
     <style>
       :root {
@@ -397,6 +462,16 @@ const html = `<!doctype html>
         margin: 0;
         color: var(--doux);
         font-size: 0.92rem;
+      }
+      .carte .pages {
+        display: block;
+        margin: 0.6rem 0 0;
+        padding: 0;
+        list-style: none;
+        font-size: 0.9rem;
+      }
+      .carte .pages li + li {
+        margin-top: 0.25rem;
       }
       .badge {
         display: inline-block;
@@ -485,10 +560,11 @@ writeFileSync(
 // La clé IndexNow, servie à la racine : elle couvre toute l'origine (voir
 // scripts/indexnow-cle.mjs). Le fichier ne contient QUE la clé.
 writeFileSync(join(SORTIE, `${INDEXNOW_CLE}.txt`), INDEXNOW_CLE, 'utf8');
+copyFileSync(IMAGE_PARTAGE, join(SORTIE, 'og-image.jpg'));
 
 console.log(
   `\nÉcrit dans ${SORTIE}/ : index.html (${FAMILY_APPS.length} applications en ` +
     `${sections.length} catégories, ${coulisses.length} en coulisses), ` +
     `robots.txt (${sites.filter(s => s.plan).length + 1} plans de site), sitemap.xml, ` +
-    `${VERIFICATION_GOOGLE}, BingSiteAuth.xml, clé IndexNow`
+    `${VERIFICATION_GOOGLE}, BingSiteAuth.xml, clé IndexNow, og-image.jpg`
 );
