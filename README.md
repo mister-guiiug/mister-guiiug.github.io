@@ -18,9 +18,9 @@ première, et trois choses en dépendaient :
 1. **`robots.txt`.** Un robots.txt n'est lu **qu'à la racine** d'une origine.
    Celui d'un sous-chemin — `/miss-dice/robots.txt` — est ignoré, et le plan de
    site qu'il déclare avec lui. Aucun plan de site du parc n'était donc annoncé.
-2. **La validation Search Console.** Une propriété *préfixe d'URL* couvre tout
-   ce qui est sous elle : validée à la racine, elle couvre tous les sites d'un
-   coup, au lieu d'une propriété par application.
+2. **La validation Search Console et Bing Webmaster Tools.** Une propriété
+   *préfixe d'URL* couvre tout ce qui est sous elle : validée à la racine, elle
+   couvre tous les sites d'un coup, au lieu d'une propriété par application.
 3. **Des liens entrants suivables.** Le champ « Website » d'un dépôt GitHub
    porte `rel="nofollow"` : il ne transmet rien. Cette page est le premier
    endroit d'où un robot peut réellement atteindre les applications.
