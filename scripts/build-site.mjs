@@ -62,6 +62,15 @@ const JETON = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? '';
  */
 const VERIFICATION_GOOGLE = 'google9caf2e3f1fe44b09.html';
 
+/**
+ * Le code de Bing Webmaster Tools, servi dans `BingSiteAuth.xml` à la racine.
+ * Même raisonnement : une propriété sur `https://mister-guiiug.github.io/`
+ * couvre tout le parc. Le code a été délivré par l'API Webmaster le 25/09/2026
+ * (`AddSite`, puis `GetUserSites`). Il n'a rien de secret, et le retirer ferait
+ * perdre la vérification.
+ */
+const VERIFICATION_BING = 'C186323DB4057177900143ABD890AEC1';
+
 // ---------------------------------------------------------------------------
 // Accès réseau
 // ---------------------------------------------------------------------------
@@ -467,6 +476,12 @@ writeFileSync(
   `google-site-verification: ${VERIFICATION_GOOGLE}`,
   'utf8'
 );
+// La forme exacte du fichier que propose Bing Webmaster Tools.
+writeFileSync(
+  join(SORTIE, 'BingSiteAuth.xml'),
+  `<?xml version="1.0"?>\n<users>\n\t<user>${VERIFICATION_BING}</user>\n</users>\n`,
+  'utf8'
+);
 // La clé IndexNow, servie à la racine : elle couvre toute l'origine (voir
 // scripts/indexnow-cle.mjs). Le fichier ne contient QUE la clé.
 writeFileSync(join(SORTIE, `${INDEXNOW_CLE}.txt`), INDEXNOW_CLE, 'utf8');
@@ -475,5 +490,5 @@ console.log(
   `\nÉcrit dans ${SORTIE}/ : index.html (${FAMILY_APPS.length} applications en ` +
     `${sections.length} catégories, ${coulisses.length} en coulisses), ` +
     `robots.txt (${sites.filter(s => s.plan).length + 1} plans de site), sitemap.xml, ` +
-    `${VERIFICATION_GOOGLE}, clé IndexNow`
+    `${VERIFICATION_GOOGLE}, BingSiteAuth.xml, clé IndexNow`
 );
