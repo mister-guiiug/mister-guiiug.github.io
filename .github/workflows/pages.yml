@@ -82,10 +82,25 @@ jobs:
       # URL dont le `lastmod` date d'hier ou d'aujourd'hui partent ; un
       # lancement manuel avec « tout » les envoie toutes. Un échec ici ne
       # défait rien : le site est déjà publié.
+      #
+      # ATTENDRE QUE L'ORIGINE RÉPONDE 200. `deploy-pages` rend la main dès que
+      # GitHub a accepté l'artefact ; Fastly peut encore servir un 404 en cache
+      # pendant quelques minutes. IndexNow invite Bing à crawler tout de suite :
+      # un 4xx à ce moment-là laisse l'URL en « Discovered but not crawled ».
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+      - name: Attendre que Pages serve l'accueil
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 \
+              https://mister-guiiug.github.io/ || echo 000)
+            echo "essai $i/30 → HTTP $code"
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "::warning::L'accueil ne répond pas encore 200 — IndexNow vérifiera chaque URL."
       - name: Signaler les pages modifiées à IndexNow
         continue-on-error: true
         run: node scripts/indexnow.mjs ${{ inputs.indexnow-tout && '--tout' || '' }}
