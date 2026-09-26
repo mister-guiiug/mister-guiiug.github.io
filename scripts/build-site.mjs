@@ -259,6 +259,9 @@ const robots = `# ${FAMILY_ORIGIN}/robots.txt
 User-agent: *
 Allow: /
 
+User-agent: bingbot
+Allow: /
+
 Sitemap: ${FAMILY_ORIGIN}/sitemap.xml
 ${sites
   .filter(s => s.plan)
@@ -380,8 +383,12 @@ const html = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Les applications de ${COMPTE}</title>
     <meta name="description" content="${echappe(description)}" />
+    <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${FAMILY_ORIGIN}/" />
+    <link rel="icon" href="${FAMILY_ORIGIN}/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="${FAMILY_ORIGIN}/favicon.ico" sizes="any" />
     <meta property="og:type" content="website" />
+
     <meta property="og:title" content="Les applications de ${COMPTE}" />
     <meta property="og:description" content="${echappe(description)}" />
     <meta property="og:url" content="${FAMILY_ORIGIN}/" />
@@ -561,10 +568,24 @@ writeFileSync(
 // scripts/indexnow-cle.mjs). Le fichier ne contient QUE la clé.
 writeFileSync(join(SORTIE, `${INDEXNOW_CLE}.txt`), INDEXNOW_CLE, 'utf8');
 copyFileSync(IMAGE_PARTAGE, join(SORTIE, 'og-image.jpg'));
+// Favicon : sans lui, les robots demandent `/favicon.ico` et reçoivent un 404
+// — le premier contact de Bing avec l'origine, souvent, avant même l'accueil.
+copyFileSync(
+  new URL('../static/favicon.ico', import.meta.url),
+  join(SORTIE, 'favicon.ico')
+);
+copyFileSync(
+  new URL('../static/favicon.svg', import.meta.url),
+  join(SORTIE, 'favicon.svg')
+);
+copyFileSync(
+  new URL('../static/favicon.png', import.meta.url),
+  join(SORTIE, 'favicon.png')
+);
 
 console.log(
   `\nÉcrit dans ${SORTIE}/ : index.html (${FAMILY_APPS.length} applications en ` +
     `${sections.length} catégories, ${coulisses.length} en coulisses), ` +
     `robots.txt (${sites.filter(s => s.plan).length + 1} plans de site), sitemap.xml, ` +
-    `${VERIFICATION_GOOGLE}, BingSiteAuth.xml, clé IndexNow, og-image.jpg`
+    `${VERIFICATION_GOOGLE}, BingSiteAuth.xml, clé IndexNow, og-image.jpg, favicons`
 );
