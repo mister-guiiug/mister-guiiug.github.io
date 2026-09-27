@@ -249,7 +249,7 @@ const pagesParApp = new Map();
 /**
  * id de l'app → URL distante de son og-image (1200×630), si elle répond.
  * À la publication on en écrit une miniature 640w dans `previews/<id>.jpg`
- * (sharp si dispo, sinon copie brute) : même source, poids mobile réduit.
+ * (+ `.webp` si sharp est dispo) : même source, poids mobile réduit.
  */
 const imageParApp = new Map();
 for (const app of FAMILY_APPS) {
@@ -391,6 +391,9 @@ const jsonLd = JSON.stringify(donneesStructurees).replace(/</g, '\\u003c');
 // index.html — groupé par catégorie, dans l'ordre du catalogue
 // ---------------------------------------------------------------------------
 
+/** Coup de projecteur éditorial — `null` = première app stable avec image. */
+const FEATURED_ID = 'miss-contraction';
+
 const maturite = m =>
   m === 'stable'
     ? ''
@@ -405,20 +408,44 @@ const maturite = m =>
 const lienHorsShell = (url, texte, attrs = '') =>
   `<a href="${echappe(url)}" target="_blank" rel="noopener noreferrer"${attrs}>${texte}</a>`;
 
-const carteApp = app => {
+const visuelPreview = (id, sizes) => `
+            <span class="visuel">
+              <picture>
+                <source type="image/webp" srcset="${FAMILY_ORIGIN}/previews/${echappe(id)}.webp" />
+                <img
+                  class="visuel-img"
+                  src="${FAMILY_ORIGIN}/previews/${echappe(id)}.jpg"
+                  alt=""
+                  width="640"
+                  height="336"
+                  sizes="${echappe(sizes)}"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </picture>
+            </span>`;
+
+const carteApp = (app, featuredId) => {
   const bureau = app.platform === 'desktop';
   const pages = pagesParApp.get(app.id) ?? [];
   const aImage = imageParApp.has(app.id);
   const descEn = DESC_EN[app.id] ?? app.description;
   const premierePage = pages[0];
-  const guide = premierePage
-    ? `
-            <p class="guide">${lienHorsShell(
-              premierePage.url,
-              '<span data-i18n="guide">Guide</span>',
-              ` class="guide-lien" title="${echappe(premierePage.titre)}"`
-            )}</p>`
-    : '';
+  const plateforme = bureau ? 'desktop' : 'web';
+  const aLaUne = featuredId && app.id === featuredId;
+  const actions = `
+            <p class="actions">
+              ${lienHorsShell(app.appUrl, '<span data-i18n="ouvrir">Ouvrir</span>', ' class="action action-ouvrir"')}
+              ${
+                premierePage
+                  ? lienHorsShell(
+                      premierePage.url,
+                      '<span data-i18n="guide">Guide</span>',
+                      ` class="action action-guide guide-lien" title="${echappe(premierePage.titre)}"`
+                    )
+                  : ''
+              }
+            </p>`;
   const recherche = [
     app.name,
     app.description,
@@ -426,33 +453,26 @@ const carteApp = app => {
     libellesFr.categories?.[app.category] ?? '',
     libellesEn.categories?.[app.category] ?? '',
     app.maturity,
+    plateforme,
   ]
     .join(' ')
     .toLowerCase();
-  const visuel = aImage
-    ? `
-            <span class="visuel">
-              <img
-                src="${FAMILY_ORIGIN}/previews/${echappe(app.id)}.jpg"
-                alt=""
-                width="640"
-                height="336"
-                sizes="(max-width: 40rem) 100vw, 320px"
-                loading="lazy"
-                decoding="async"
-              />
-            </span>`
-    : '';
+  const visuel = aImage ? visuelPreview(app.id, '(max-width: 40rem) 100vw, 320px') : '';
   const badgeBureau = bureau
     ? ` <span class="badge" data-i18n="badgeDesktop">${echappe('Application de bureau')}</span>`
     : '';
-  const classes = bureau ? 'carte carte-bureau' : 'carte';
-  return `          <li class="${classes}" data-search="${echappe(recherche)}" data-maturity="${echappe(app.maturity)}">
+  const badgeUne = aLaUne
+    ? ` <span class="badge badge-une" data-i18n="aLaUne">${echappe('À la une')}</span>`
+    : '';
+  const classes = ['carte', bureau ? 'carte-bureau' : '', aLaUne ? 'carte-une' : '']
+    .filter(Boolean)
+    .join(' ');
+  return `          <li class="${classes}" data-search="${echappe(recherche)}" data-maturity="${echappe(app.maturity)}" data-platform="${plateforme}" data-cat="${echappe(app.category)}">
             ${lienHorsShell(app.appUrl, '', ` class="carte-hit" aria-label="${echappe(app.name)}"`)}
 ${visuel}
             <div class="corps">
-              <h3><span class="nom">${echappe(app.name)}</span>${maturite(app.maturity)}${badgeBureau}</h3>
-              <p data-fr="${echappe(app.description)}" data-en="${echappe(descEn)}">${echappe(app.description)}</p>${guide}
+              <h3><span class="nom">${echappe(app.name)}</span>${maturite(app.maturity)}${badgeBureau}${badgeUne}</h3>
+              <p data-fr="${echappe(app.description)}" data-en="${echappe(descEn)}">${echappe(app.description)}</p>${actions}
             </div>
           </li>`;
 };
@@ -461,10 +481,25 @@ const catsAvecApps = CATEGORIES.filter(cat =>
   FAMILY_APPS.some(a => a.category === cat)
 );
 
+/** Coup de projecteur : FEATURED_ID si valide, sinon première stable avec image. */
+const featuredApp =
+  (FEATURED_ID ? FAMILY_APPS.find(a => a.id === FEATURED_ID) : null) ??
+  FAMILY_APPS.find(a => a.maturity === 'stable' && imageParApp.has(a.id)) ??
+  null;
+const featuredId = featuredApp?.id ?? null;
+
 const navCats = catsAvecApps
   .map(
     cat =>
       `          <a href="#cat-${cat}" data-cat="${echappe(cat)}" data-i18n-cat="${echappe(cat)}">${echappe(libellesFr.categories?.[cat] ?? cat)}</a>`
+  )
+  .join('\n');
+
+const videSuggestions = catsAvecApps
+  .slice(0, 3)
+  .map(
+    cat =>
+      `        <button type="button" class="chip vide-cat" data-suggest-cat="${echappe(cat)}" data-i18n-cat="${echappe(cat)}">${echappe(libellesFr.categories?.[cat] ?? cat)}</button>`
   )
   .join('\n');
 
@@ -474,15 +509,11 @@ const sections = CATEGORIES.map(cat => {
   return `      <section data-cat-section="${echappe(cat)}" aria-labelledby="cat-${cat}">
         <h2 id="cat-${cat}" data-i18n-cat="${echappe(cat)}">${echappe(libellesFr.categories?.[cat] ?? cat)}</h2>
         <ul>
-${apps.map(carteApp).join('\n')}
+${apps.map(a => carteApp(a, featuredId)).join('\n')}
         </ul>
       </section>`;
 }).filter(Boolean);
 
-/** Coup de projecteur : première app stable avec image — pas un choix éditorial figé. */
-const featuredApp = FAMILY_APPS.find(
-  a => a.maturity === 'stable' && imageParApp.has(a.id)
-);
 const featuredDescEn = featuredApp
   ? (DESC_EN[featuredApp.id] ?? featuredApp.description)
   : '';
@@ -492,19 +523,13 @@ const featuredHtml = featuredApp
       <p class="projecteur-label" id="projecteur-titre" data-i18n="projecteur">Coup de projecteur</p>
       <div class="projecteur-carte">
         ${lienHorsShell(featuredApp.appUrl, '', ` class="carte-hit" aria-label="${echappe(featuredApp.name)}"`)}
-        <span class="visuel">
-          <img
-            src="${FAMILY_ORIGIN}/previews/${echappe(featuredApp.id)}.jpg"
-            alt=""
-            width="640"
-            height="336"
-            sizes="(max-width: 40rem) 100vw, 480px"
-            decoding="async"
-          />
-        </span>
+${imageParApp.has(featuredApp.id) ? visuelPreview(featuredApp.id, '(max-width: 40rem) 100vw, 480px').replace('loading="lazy"', '') : ''}
         <div class="corps">
           <h2 class="projecteur-nom">${echappe(featuredApp.name)}</h2>
           <p data-fr="${echappe(featuredApp.description)}" data-en="${echappe(featuredDescEn)}">${echappe(featuredApp.description)}</p>
+          <p class="actions">
+            ${lienHorsShell(featuredApp.appUrl, '<span data-i18n="ouvrir">Ouvrir</span>', ' class="action action-ouvrir"')}
+          </p>
         </div>
       </div>
     </aside>`
@@ -577,6 +602,18 @@ const i18nJson = JSON.stringify({
     filtrePh: 'Filtrer les applications…',
     filtreVide: 'Aucune application ne correspond.',
     filtreEffacer: 'Effacer le filtre',
+    filtreSuggestions: 'Essayer une catégorie',
+    filtresPlus: 'Filtres',
+    enSavoirPlus: 'En savoir plus',
+    enSavoirMoins: 'Réduire',
+    ouvrir: 'Ouvrir',
+    aLaUne: 'À la une',
+    plateformeFiltre: 'Plateforme',
+    plateformeTous: 'Toutes',
+    plateformeWeb: 'PWA',
+    plateformeDesktop: 'Bureau',
+    coulissesIntro: 'Infrastructure de la famille — pas des applications à installer.',
+    licence: 'Licence MIT',
     nav: 'Catégories',
     guide: 'Guide',
     skip: 'Aller aux applications',
@@ -616,6 +653,18 @@ const i18nJson = JSON.stringify({
     filtrePh: 'Filter apps…',
     filtreVide: 'No apps match.',
     filtreEffacer: 'Clear filter',
+    filtreSuggestions: 'Try a category',
+    filtresPlus: 'Filters',
+    enSavoirPlus: 'Read more',
+    enSavoirMoins: 'Show less',
+    ouvrir: 'Open',
+    aLaUne: 'Featured',
+    plateformeFiltre: 'Platform',
+    plateformeTous: 'All',
+    plateformeWeb: 'PWA',
+    plateformeDesktop: 'Desktop',
+    coulissesIntro: 'Family infrastructure — not apps to install.',
+    licence: 'MIT license',
     nav: 'Categories',
     guide: 'Guide (FR)',
     skip: 'Skip to apps',
@@ -749,6 +798,26 @@ const html = `<!doctype html>
         color: var(--texte);
         font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
         line-height: 1.6;
+      }
+      html[data-theme='dark'] body,
+      html[data-theme='system'] body {
+        background:
+          radial-gradient(ellipse 90% 55% at 50% -15%, color-mix(in srgb, var(--lien) 22%, transparent), transparent 70%),
+          radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--texte) 14%, transparent) 0 1.15px, transparent 1.8px),
+          radial-gradient(circle at 78% 32%, color-mix(in srgb, var(--texte) 11%, transparent) 0 1px, transparent 1.6px),
+          radial-gradient(circle at 42% 70%, color-mix(in srgb, var(--texte) 9%, transparent) 0 1px, transparent 1.5px),
+          var(--fond);
+        background-size: auto, 2.8rem 2.8rem, 3.6rem 3.6rem, 4.4rem 4.4rem, auto;
+      }
+      @media (prefers-color-scheme: light) {
+        html[data-theme='system'] body {
+          background:
+            radial-gradient(ellipse 90% 55% at 50% -15%, color-mix(in srgb, var(--lien) 16%, transparent), transparent 70%),
+            radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--texte) 4%, transparent) 0 1px, transparent 1.5px),
+            radial-gradient(circle at 78% 32%, color-mix(in srgb, var(--texte) 3.5%, transparent) 0 1px, transparent 1.5px),
+            var(--fond);
+          background-size: auto, 3.2rem 3.2rem, 4.1rem 4.1rem, auto;
+        }
       }
       .sr-only {
         position: absolute;
@@ -1134,13 +1203,43 @@ const html = `<!doctype html>
         color: var(--doux);
         font-size: 0.92rem;
       }
-      .carte .guide {
-        margin-top: 0.65rem;
-        font-size: 0.9rem;
-      }
-      .guide-lien {
+      .carte .actions,
+      .projecteur-carte .actions {
         position: relative;
         z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 0.85rem;
+        margin-top: 0.75rem;
+        font-size: 0.9rem;
+      }
+      .action {
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .action:hover {
+        text-decoration: underline;
+      }
+      .guide-lien,
+      .action-ouvrir,
+      .action-guide {
+        position: relative;
+        z-index: 2;
+      }
+      .visuel-img {
+        opacity: 0;
+        transition: opacity 0.35s ease;
+      }
+      .visuel-img.is-loaded {
+        opacity: 1;
+      }
+      .badge-une {
+        color: var(--lien);
+        border-color: color-mix(in srgb, var(--lien) 45%, var(--bord));
+        background: color-mix(in srgb, var(--lien) 10%, var(--fond-carte));
+      }
+      .carte-une {
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--lien) 25%, transparent);
       }
       .vide {
         display: none;
@@ -1166,6 +1265,13 @@ const html = `<!doctype html>
         color: var(--lien);
         font: inherit;
         cursor: pointer;
+      }
+      .vide-suggestions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        justify-content: center;
+        margin: 0.85rem 0 0;
       }
       .badge {
         display: inline-block;
@@ -1205,6 +1311,14 @@ const html = `<!doctype html>
       .coulisses:hover,
       .coulisses:focus-within {
         opacity: 0.92;
+      }
+      .coulisses-intro {
+        margin: 0 0 0.9rem;
+        color: var(--doux);
+        font-size: 0.9rem;
+        font-weight: 400;
+        text-transform: none;
+        letter-spacing: 0;
       }
       footer {
         margin-top: 3rem;
@@ -1250,6 +1364,116 @@ const html = `<!doctype html>
         stroke-linecap: round;
         stroke-linejoin: round;
       }
+      .filtres-toggle {
+        display: none;
+        appearance: none;
+        width: 100%;
+        padding: 0.55rem 0.85rem;
+        border: 1px solid var(--bord);
+        border-radius: 0.75rem;
+        background: var(--barre);
+        color: var(--texte);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        text-align: left;
+      }
+      .filtres-panel {
+        display: grid;
+        gap: 0.55rem;
+      }
+      .sommaire-wrap {
+        position: relative;
+      }
+      .sommaire-wrap::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 2.25rem;
+        pointer-events: none;
+        background: linear-gradient(to right, transparent, var(--chrome));
+        opacity: 0;
+        transition: opacity 0.15s;
+      }
+      .sommaire-wrap[data-overflow='1']::after {
+        opacity: 1;
+      }
+      .chapeau {
+        transition: none;
+      }
+      .chapeau-plus {
+        display: none;
+        appearance: none;
+        margin: 0 0 0.65rem;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: var(--lien);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .chrome {
+        transition: transform 0.2s ease;
+      }
+      .chrome.is-hidden {
+        transform: translateY(calc(-100% - 1px));
+      }
+      .marque {
+        animation: marque-in 0.55s ease both;
+      }
+      @keyframes marque-in {
+        from {
+          opacity: 0;
+          transform: translateY(0.35rem);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .marque {
+          animation: none;
+        }
+        .visuel-img {
+          opacity: 1;
+          transition: none;
+        }
+        .chrome {
+          transition: none;
+        }
+      }
+      @media (forced-colors: active) {
+        .carte,
+        .chip,
+        .sommaire a,
+        .sponsor,
+        .prefs fieldset,
+        .filtre input,
+        .installer {
+          border: 1px solid CanvasText;
+        }
+        .carte-hit:focus-visible,
+        a:focus-visible,
+        .prefs button:focus-visible,
+        .chip:focus-visible {
+          outline: 3px solid Highlight;
+        }
+        .sommaire a[aria-current='true'],
+        .chip[aria-pressed='true'],
+        .prefs button[aria-pressed='true'] {
+          background: Highlight;
+          color: HighlightText;
+          forced-color-adjust: none;
+        }
+      }
+      ::view-transition-old(root),
+      ::view-transition-new(root) {
+        animation-duration: 0.28s;
+      }
       @media (max-width: 40rem) {
         .hero {
           flex-direction: column;
@@ -1261,6 +1485,29 @@ const html = `<!doctype html>
         .sous-titre {
           margin-left: auto;
           margin-right: auto;
+        }
+        .chapeau {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
+        }
+        .chapeau.is-open {
+          display: block;
+          -webkit-line-clamp: unset;
+          overflow: visible;
+        }
+        .chapeau-plus {
+          display: inline;
+        }
+        .filtres-toggle {
+          display: block;
+        }
+        .filtres-panel {
+          display: none;
+        }
+        .filtres-panel.is-open {
+          display: grid;
         }
         .projecteur-carte {
           grid-template-columns: 1fr;
@@ -1316,16 +1563,26 @@ const html = `<!doctype html>
             spellcheck="false"
           />
         </label>
-        <div class="maturite" role="group" data-i18n-aria="maturiteFiltre" aria-label="Maturité">
-          <button type="button" class="chip" data-maturity-filter="" aria-pressed="true" data-i18n="maturiteTous">Toutes</button>
-          <button type="button" class="chip" data-maturity-filter="stable" aria-pressed="false" data-i18n-maturity="stable">Stable</button>
-          <button type="button" class="chip" data-maturity-filter="alpha" aria-pressed="false" data-i18n-maturity="alpha">Alpha</button>
-          <button type="button" class="chip" data-maturity-filter="beta" aria-pressed="false" data-i18n-maturity="beta">Bêta</button>
+        <button type="button" class="filtres-toggle" id="filtres-toggle" data-i18n="filtresPlus" aria-expanded="false" aria-controls="filtres-panel">Filtres</button>
+        <div class="filtres-panel" id="filtres-panel">
+          <div class="maturite" role="group" data-i18n-aria="maturiteFiltre" aria-label="Maturité">
+            <button type="button" class="chip" data-maturity-filter="" aria-pressed="true" data-i18n="maturiteTous">Toutes</button>
+            <button type="button" class="chip" data-maturity-filter="stable" aria-pressed="false" data-i18n-maturity="stable">Stable</button>
+            <button type="button" class="chip" data-maturity-filter="alpha" aria-pressed="false" data-i18n-maturity="alpha">Alpha</button>
+            <button type="button" class="chip" data-maturity-filter="beta" aria-pressed="false" data-i18n-maturity="beta">Bêta</button>
+          </div>
+          <div class="maturite plateforme" role="group" data-i18n-aria="plateformeFiltre" aria-label="Plateforme">
+            <button type="button" class="chip" data-platform-filter="" aria-pressed="true" data-i18n="plateformeTous">Toutes</button>
+            <button type="button" class="chip" data-platform-filter="web" aria-pressed="false" data-i18n="plateformeWeb">PWA</button>
+            <button type="button" class="chip" data-platform-filter="desktop" aria-pressed="false" data-i18n="plateformeDesktop">Bureau</button>
+          </div>
         </div>
-        <nav class="sommaire" data-i18n-aria="nav" aria-label="Catégories">
+        <div class="sommaire-wrap" id="sommaire-wrap">
+          <nav class="sommaire" data-i18n-aria="nav" aria-label="Catégories">
 ${navCats}
-        </nav>
-        <p class="compte" id="compte" data-i18n="compte">${nbApps} applications · ${nbCats} catégories</p>
+          </nav>
+        </div>
+        <p class="compte" id="compte" data-i18n="compte" aria-live="polite">${nbApps} applications · ${nbCats} catégories</p>
       </div>
     </div>
 
@@ -1341,12 +1598,13 @@ ${navCats}
       <div class="hero-texte">
         <h1 class="marque" data-i18n="marque">GuiiuG</h1>
         <p class="sous-titre" data-i18n="sousTitre">Les applications de ${COMPTE}</p>
-        <p class="chapeau" data-i18n="chapeau" data-i18n-pwa="chapeauPwa">
+        <p class="chapeau" id="chapeau" data-i18n="chapeau" data-i18n-pwa="chapeauPwa">
           Une famille d'applications web installables. Chacune s'installe depuis
           le navigateur, sans magasin d'applications, et la plupart continuent de
           fonctionner hors ligne une fois ouvertes. Ce catalogue aussi
           s'installe : menu ⋮ de Chrome → « Installer l'application ».
         </p>
+        <button type="button" class="chapeau-plus" id="chapeau-plus" data-i18n="enSavoirPlus" aria-expanded="false" aria-controls="chapeau">En savoir plus</button>
         <p class="confiance" data-i18n="confiance">
           Open source, hébergées en Europe, sans magasin — et sans compte obligatoire pour démarrer.
         </p>
@@ -1359,6 +1617,10 @@ ${featuredHtml}
     <div class="vide" id="filtre-vide" role="status">
       <p data-i18n="filtreVide">Aucune application ne correspond.</p>
       <button type="button" class="vide-effacer" id="filtre-effacer" data-i18n="filtreEffacer">Effacer le filtre</button>
+      <p class="vide-suggestions-label" data-i18n="filtreSuggestions">Essayer une catégorie</p>
+      <div class="vide-suggestions">
+${videSuggestions}
+      </div>
     </div>
 
     <main id="catalogue">
@@ -1368,6 +1630,7 @@ ${
     ? `
       <section class="coulisses" aria-labelledby="coulisses">
         <h2 id="coulisses" data-i18n="coulisses">Dans les coulisses</h2>
+        <p class="coulisses-intro" data-i18n="coulissesIntro">Infrastructure de la famille — pas des applications à installer.</p>
         <ul>
 ${coulisses.map(carteCoulisse).join('\n')}
         </ul>
@@ -1390,9 +1653,13 @@ ${coulisses.map(carteCoulisse).join('\n')}
           <span data-i18n="sponsorLink">M'offrir un café</span>
         </a>
       </p>
-      <p data-i18n="maj">Mis à jour le ${dateAfficheFr}</p>
+      <p>
+        <span data-i18n="maj">Mis à jour le ${dateAfficheFr}</span>
+        ·
+        <a href="https://github.com/${COMPTE}/${SOI}/blob/main/LICENSE" data-i18n="licence">Licence MIT</a>
+      </p>
     </footer>
-    <script>
+<script>
       (function () {
         var I18N = ${i18nJson};
         var root = document.documentElement;
@@ -1400,8 +1667,13 @@ ${coulisses.map(carteCoulisse).join('\n')}
         var filtre = document.getElementById('filtre');
         var vide = document.getElementById('filtre-vide');
         var compte = document.getElementById('compte');
+        var chromeEl = document.querySelector('.chrome');
+        var sommaire = document.querySelector('.sommaire');
+        var sommaireWrap = document.getElementById('sommaire-wrap');
         var maturityFilter = '';
+        var platformFilter = '';
         var deferredPrompt = null;
+        var syncingUrl = false;
 
         function lang() {
           return root.lang === 'en' ? 'en' : 'fr';
@@ -1456,6 +1728,11 @@ ${coulisses.map(carteCoulisse).join('\n')}
           document.querySelectorAll('[data-set-lang]').forEach(function (btn) {
             btn.setAttribute('aria-pressed', btn.getAttribute('data-set-lang') === l ? 'true' : 'false');
           });
+          var plus = document.getElementById('chapeau-plus');
+          var chapeau = document.getElementById('chapeau');
+          if (plus && chapeau) {
+            plus.textContent = chapeau.classList.contains('is-open') ? t.enSavoirMoins : t.enSavoirPlus;
+          }
           updateCompte();
         }
 
@@ -1468,12 +1745,32 @@ ${coulisses.map(carteCoulisse).join('\n')}
 
         function applyTheme(th) {
           if (th !== 'light' && th !== 'dark' && th !== 'system') th = 'system';
-          root.dataset.theme = th;
-          try { localStorage.setItem('hub-theme', th); } catch (e) {}
-          if (themeMeta) themeMeta.setAttribute('content', resolveThemeColor());
-          document.querySelectorAll('[data-set-theme]').forEach(function (btn) {
-            btn.setAttribute('aria-pressed', btn.getAttribute('data-set-theme') === th ? 'true' : 'false');
-          });
+          var run = function () {
+            root.dataset.theme = th;
+            try { localStorage.setItem('hub-theme', th); } catch (e) {}
+            if (themeMeta) themeMeta.setAttribute('content', resolveThemeColor());
+            document.querySelectorAll('[data-set-theme]').forEach(function (btn) {
+              btn.setAttribute('aria-pressed', btn.getAttribute('data-set-theme') === th ? 'true' : 'false');
+            });
+          };
+          if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            document.startViewTransition(run);
+          } else {
+            run();
+          }
+        }
+
+        function writeUrl() {
+          if (syncingUrl) return;
+          var p = new URLSearchParams();
+          var q = filtre ? filtre.value.trim() : '';
+          if (q) p.set('q', q);
+          if (maturityFilter) p.set('m', maturityFilter);
+          if (platformFilter) p.set('p', platformFilter);
+          var qs = p.toString();
+          var next = qs ? location.pathname + '?' + qs + location.hash : location.pathname + location.hash;
+          var cur = location.pathname + location.search + location.hash;
+          if (next !== cur) history.replaceState(null, '', next);
         }
 
         function updateCompte() {
@@ -1483,13 +1780,14 @@ ${coulisses.map(carteCoulisse).join('\n')}
             if (!carte.hidden) visible += 1;
           });
           var q = filtre ? filtre.value.trim() : '';
-          var filtered = q !== '' || maturityFilter !== '';
+          var filtered = q !== '' || maturityFilter !== '' || platformFilter !== '';
           if (compte) {
             compte.textContent = filtered
               ? t.compteFiltre.replace('{n}', String(visible))
               : t.compte;
           }
           if (vide) vide.setAttribute('data-visible', filtered && visible === 0 ? '1' : '0');
+          writeUrl();
         }
 
         function applyFilters() {
@@ -1498,7 +1796,9 @@ ${coulisses.map(carteCoulisse).join('\n')}
             var textOk = q === '' || carte.getAttribute('data-search').indexOf(q) !== -1;
             var mat = carte.getAttribute('data-maturity') || '';
             var matOk = maturityFilter === '' || mat === maturityFilter;
-            carte.hidden = !(textOk && matOk);
+            var plat = carte.getAttribute('data-platform') || '';
+            var platOk = platformFilter === '' || plat === platformFilter;
+            carte.hidden = !(textOk && matOk && platOk);
           });
           document.querySelectorAll('main > section').forEach(function (sec) {
             if (sec.classList.contains('coulisses')) return;
@@ -1516,11 +1816,67 @@ ${coulisses.map(carteCoulisse).join('\n')}
         function clearFilters() {
           if (filtre) filtre.value = '';
           maturityFilter = '';
+          platformFilter = '';
           document.querySelectorAll('[data-maturity-filter]').forEach(function (btn) {
             btn.setAttribute('aria-pressed', btn.getAttribute('data-maturity-filter') === '' ? 'true' : 'false');
           });
+          document.querySelectorAll('[data-platform-filter]').forEach(function (btn) {
+            btn.setAttribute('aria-pressed', btn.getAttribute('data-platform-filter') === '' ? 'true' : 'false');
+          });
           applyFilters();
           if (filtre) filtre.focus();
+        }
+
+        function readUrl() {
+          syncingUrl = true;
+          var p = new URLSearchParams(location.search);
+          if (filtre && p.has('q')) filtre.value = p.get('q') || '';
+          if (p.has('m')) {
+            maturityFilter = p.get('m') || '';
+            document.querySelectorAll('[data-maturity-filter]').forEach(function (btn) {
+              btn.setAttribute(
+                'aria-pressed',
+                (btn.getAttribute('data-maturity-filter') || '') === maturityFilter ? 'true' : 'false'
+              );
+            });
+          }
+          if (p.has('p')) {
+            platformFilter = p.get('p') || '';
+            document.querySelectorAll('[data-platform-filter]').forEach(function (btn) {
+              btn.setAttribute(
+                'aria-pressed',
+                (btn.getAttribute('data-platform-filter') || '') === platformFilter ? 'true' : 'false'
+              );
+            });
+          }
+          applyFilters();
+          if (p.has('cat')) {
+            var target = document.getElementById('cat-' + p.get('cat'));
+            if (target) {
+              setTimeout(function () {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 50);
+            }
+          }
+          syncingUrl = false;
+        }
+
+        function markImages() {
+          document.querySelectorAll('.visuel-img').forEach(function (img) {
+            var done = function () {
+              img.classList.add('is-loaded');
+            };
+            if (img.complete && img.naturalWidth) done();
+            else img.addEventListener('load', done, { once: true });
+            img.addEventListener('error', done, { once: true });
+          });
+        }
+
+        function updateSommaireFade() {
+          if (!sommaire || !sommaireWrap) return;
+          var overflow = sommaire.scrollWidth > sommaire.clientWidth + 4;
+          var atEnd = sommaire.scrollLeft + sommaire.clientWidth >= sommaire.scrollWidth - 4;
+          sommaireWrap.setAttribute('data-overflow', overflow && !atEnd ? '1' : '0');
         }
 
         document.querySelectorAll('[data-set-lang]').forEach(function (btn) {
@@ -1537,9 +1893,7 @@ ${coulisses.map(carteCoulisse).join('\n')}
           if (theme() === 'system') applyTheme('system');
         });
 
-        if (filtre) {
-          filtre.addEventListener('input', applyFilters);
-        }
+        if (filtre) filtre.addEventListener('input', applyFilters);
         document.querySelectorAll('[data-maturity-filter]').forEach(function (btn) {
           btn.addEventListener('click', function () {
             maturityFilter = btn.getAttribute('data-maturity-filter') || '';
@@ -1549,8 +1903,48 @@ ${coulisses.map(carteCoulisse).join('\n')}
             applyFilters();
           });
         });
+        document.querySelectorAll('[data-platform-filter]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            platformFilter = btn.getAttribute('data-platform-filter') || '';
+            document.querySelectorAll('[data-platform-filter]').forEach(function (b) {
+              b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
+            });
+            applyFilters();
+          });
+        });
         var effacer = document.getElementById('filtre-effacer');
         if (effacer) effacer.addEventListener('click', clearFilters);
+
+        document.querySelectorAll('[data-suggest-cat]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            clearFilters();
+            var cat = btn.getAttribute('data-suggest-cat');
+            var target = document.getElementById('cat-' + cat);
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            history.replaceState(null, '', location.pathname + '?cat=' + encodeURIComponent(cat));
+          });
+        });
+
+        var filtresToggle = document.getElementById('filtres-toggle');
+        var filtresPanel = document.getElementById('filtres-panel');
+        if (filtresToggle && filtresPanel) {
+          filtresToggle.addEventListener('click', function () {
+            var open = !filtresPanel.classList.contains('is-open');
+            filtresPanel.classList.toggle('is-open', open);
+            filtresToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+          });
+        }
+
+        var chapeauPlus = document.getElementById('chapeau-plus');
+        var chapeau = document.getElementById('chapeau');
+        if (chapeauPlus && chapeau) {
+          chapeauPlus.addEventListener('click', function () {
+            var open = !chapeau.classList.contains('is-open');
+            chapeau.classList.toggle('is-open', open);
+            chapeauPlus.setAttribute('aria-expanded', open ? 'true' : 'false');
+            chapeauPlus.textContent = open ? I18N[lang()].enSavoirMoins : I18N[lang()].enSavoirPlus;
+          });
+        }
 
         document.addEventListener('keydown', function (e) {
           if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -1590,6 +1984,26 @@ ${coulisses.map(carteCoulisse).join('\n')}
           });
         }
 
+        if (sommaire) {
+          sommaire.addEventListener('scroll', updateSommaireFade, { passive: true });
+          window.addEventListener('resize', updateSommaireFade);
+          updateSommaireFade();
+        }
+
+        if (chromeEl && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          var lastY = window.scrollY;
+          window.addEventListener(
+            'scroll',
+            function () {
+              var y = window.scrollY;
+              if (y > lastY + 8 && y > 96) chromeEl.classList.add('is-hidden');
+              else if (y < lastY - 8) chromeEl.classList.remove('is-hidden');
+              lastY = y;
+            },
+            { passive: true }
+          );
+        }
+
         var installer = document.getElementById('installer');
         window.addEventListener('beforeinstallprompt', function (e) {
           if (isPwa()) return;
@@ -1618,14 +2032,16 @@ ${coulisses.map(carteCoulisse).join('\n')}
           }
         });
 
+        markImages();
         applyLang(lang());
         applyTheme(theme());
-        applyFilters();
+        readUrl();
 
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.register('${FAMILY_ORIGIN}/sw.js').catch(function () {});
         }
       })();
+    </script>
     </script>
   </body>
 </html>
@@ -1668,9 +2084,10 @@ const manifeste = {
   ],
 };
 
-const sw = `/* Hub ${COMPTE} — réseau d'abord, repli cache pour l'accueil. */
-const CACHE = 'hub-v1';
-const PRECACHE = ['${FAMILY_ORIGIN}/', '${FAMILY_ORIGIN}/index.html', '${FAMILY_ORIGIN}/manifest.webmanifest', '${FAMILY_ORIGIN}/icon-192.png', '${FAMILY_ORIGIN}/icon-512.png'];
+const sw = `/* Hub ${COMPTE} — réseau d'abord, repli offline dédié. */
+const CACHE = 'hub-v3';
+const OFFLINE = '${FAMILY_ORIGIN}/offline.html';
+const PRECACHE = ['${FAMILY_ORIGIN}/', '${FAMILY_ORIGIN}/index.html', OFFLINE, '${FAMILY_ORIGIN}/manifest.webmanifest', '${FAMILY_ORIGIN}/icon-192.png', '${FAMILY_ORIGIN}/icon-512.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
@@ -1687,6 +2104,7 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET') return;
+  const nav = req.mode === 'navigate';
   event.respondWith(
     fetch(req)
       .then(res => {
@@ -1694,9 +2112,45 @@ self.addEventListener('fetch', event => {
         caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
         return res;
       })
-      .catch(() => caches.match(req).then(r => r || caches.match('${FAMILY_ORIGIN}/')))
+      .catch(() =>
+        caches.match(req).then(r => r || (nav ? caches.match(OFFLINE) : caches.match('${FAMILY_ORIGIN}/')))
+      )
   );
 });
+`;
+
+const offlineHtml = `<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hors ligne — GuiiuG</title>
+    <meta name="theme-color" content="${THEME}" />
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 1.5rem;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: #0f1220;
+        color: #e8e9f2;
+        text-align: center;
+      }
+      h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
+      p { margin: 0; color: #a8abc2; max-width: 28rem; }
+      a { color: #9fb2ff; }
+    </style>
+  </head>
+  <body>
+    <div>
+      <h1>Hors ligne</h1>
+      <p>Le catalogue GuiiuG n'est pas joignable pour le moment. Réouvre la page quand le réseau revient.</p>
+      <p style="margin-top:1rem"><a href="${FAMILY_ORIGIN}/">Réessayer</a></p>
+    </div>
+  </body>
+</html>
 `;
 
 mkdirSync(SORTIE, { recursive: true });
@@ -1712,11 +2166,14 @@ let previewsOk = 0;
 for (const [id, url] of imageParApp) {
   try {
     const buf = Buffer.from(await (await fetch(url)).arrayBuffer());
-    const dest = join(SORTIE, 'previews', `${id}.jpg`);
+    const destJpg = join(SORTIE, 'previews', `${id}.jpg`);
+    const destWebp = join(SORTIE, 'previews', `${id}.webp`);
     if (sharpMod) {
-      await sharpMod(buf).resize({ width: 640 }).jpeg({ quality: 78, mozjpeg: true }).toFile(dest);
+      const base = sharpMod(buf).resize({ width: 640 });
+      await base.clone().jpeg({ quality: 78, mozjpeg: true }).toFile(destJpg);
+      await base.clone().webp({ quality: 72 }).toFile(destWebp);
     } else {
-      writeFileSync(dest, buf);
+      writeFileSync(destJpg, buf);
     }
     previewsOk += 1;
   } catch (e) {
@@ -1726,6 +2183,7 @@ for (const [id, url] of imageParApp) {
 console.log(`Previews : ${previewsOk}/${imageParApp.size}`);
 
 writeFileSync(join(SORTIE, 'index.html'), html, 'utf8');
+writeFileSync(join(SORTIE, 'offline.html'), offlineHtml, 'utf8');
 writeFileSync(join(SORTIE, 'robots.txt'), robots, 'utf8');
 writeFileSync(
   join(SORTIE, 'manifest.webmanifest'),
@@ -1782,5 +2240,5 @@ console.log(
     `${sections.length} catégories, ${coulisses.length} en coulisses), ` +
     `robots.txt (${sites.filter(s => s.plan).length + 1} plans de site), sitemap.xml, ` +
     `${VERIFICATION_GOOGLE}, BingSiteAuth.xml, clé IndexNow, og-image.jpg, ` +
-    `previews/ (${previewsOk}), manifest.webmanifest, sw.js, icônes PWA`
+    `previews/ (${previewsOk}), offline.html, manifest.webmanifest, sw.js, icônes PWA`
 );
