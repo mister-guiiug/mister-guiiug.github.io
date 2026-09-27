@@ -425,6 +425,14 @@ const visuelPreview = (id, sizes) => `
               </picture>
             </span>`;
 
+const visuelMono = nom => {
+  const initiale = [...String(nom ?? '?')][0]?.toUpperCase() ?? '?';
+  return `
+            <span class="visuel visuel-mono" aria-hidden="true">
+              <span class="mono-lettre">${echappe(initiale)}</span>
+            </span>`;
+};
+
 const carteApp = (app, featuredId) => {
   const bureau = app.platform === 'desktop';
   const pages = pagesParApp.get(app.id) ?? [];
@@ -457,7 +465,9 @@ const carteApp = (app, featuredId) => {
   ]
     .join(' ')
     .toLowerCase();
-  const visuel = aImage ? visuelPreview(app.id, '(max-width: 40rem) 100vw, 320px') : '';
+  const visuel = aImage
+    ? visuelPreview(app.id, '(max-width: 40rem) 100vw, 320px')
+    : visuelMono(app.name);
   const badgeBureau = bureau
     ? ` <span class="badge" data-i18n="badgeDesktop">${echappe('Application de bureau')}</span>`
     : '';
@@ -467,8 +477,10 @@ const carteApp = (app, featuredId) => {
   const classes = ['carte', bureau ? 'carte-bureau' : '', aLaUne ? 'carte-une' : '']
     .filter(Boolean)
     .join(' ');
-  return `          <li class="${classes}" data-search="${echappe(recherche)}" data-maturity="${echappe(app.maturity)}" data-platform="${plateforme}" data-cat="${echappe(app.category)}">
-            ${lienHorsShell(app.appUrl, '', ` class="carte-hit" aria-label="${echappe(app.name)}"`)}
+  const rang =
+    app.maturity === 'stable' ? '0' : app.maturity === 'beta' ? '1' : '2';
+  return `          <li class="${classes}" data-search="${echappe(recherche)}" data-maturity="${echappe(app.maturity)}" data-platform="${plateforme}" data-cat="${echappe(app.category)}" data-name="${echappe(app.name.toLowerCase())}" data-rang="${rang}">
+            ${lienHorsShell(app.appUrl, '', ` class="carte-hit" tabindex="-1" aria-hidden="true"`)}
 ${visuel}
             <div class="corps">
               <h3><span class="nom">${echappe(app.name)}</span>${maturite(app.maturity)}${badgeBureau}${badgeUne}</h3>
@@ -503,17 +515,24 @@ const videSuggestions = catsAvecApps
   )
   .join('\n');
 
+const ordreApps = (a, b) => {
+  const rang = m => (m === 'stable' ? 0 : m === 'beta' ? 1 : 2);
+  return rang(a.maturity) - rang(b.maturity) || a.name.localeCompare(b.name, 'fr');
+};
+
 const sections = CATEGORIES.map(cat => {
-  const apps = FAMILY_APPS.filter(a => a.category === cat);
+  const apps = FAMILY_APPS.filter(a => a.category === cat).slice().sort(ordreApps);
   if (!apps.length) return null;
   return `      <section data-cat-section="${echappe(cat)}" aria-labelledby="cat-${cat}">
         <h2 id="cat-${cat}" data-i18n-cat="${echappe(cat)}">${echappe(libellesFr.categories?.[cat] ?? cat)}</h2>
-        <ul>
+        <ul data-grille>
 ${apps.map(a => carteApp(a, featuredId)).join('\n')}
         </ul>
       </section>`;
 }).filter(Boolean);
 
+const featuredPages = featuredApp ? (pagesParApp.get(featuredApp.id) ?? []) : [];
+const featuredGuide = featuredPages[0];
 const featuredDescEn = featuredApp
   ? (DESC_EN[featuredApp.id] ?? featuredApp.description)
   : '';
@@ -522,18 +541,32 @@ const featuredHtml = featuredApp
     <aside class="projecteur" aria-labelledby="projecteur-titre">
       <p class="projecteur-label" id="projecteur-titre" data-i18n="projecteur">Coup de projecteur</p>
       <div class="projecteur-carte">
-        ${lienHorsShell(featuredApp.appUrl, '', ` class="carte-hit" aria-label="${echappe(featuredApp.name)}"`)}
-${imageParApp.has(featuredApp.id) ? visuelPreview(featuredApp.id, '(max-width: 40rem) 100vw, 480px').replace('loading="lazy"', '') : ''}
+        ${lienHorsShell(featuredApp.appUrl, '', ` class="carte-hit" tabindex="-1" aria-hidden="true"`)}
+${imageParApp.has(featuredApp.id) ? visuelPreview(featuredApp.id, '(max-width: 40rem) 100vw, 480px').replace('loading="lazy"', '') : visuelMono(featuredApp.name)}
         <div class="corps">
           <h2 class="projecteur-nom">${echappe(featuredApp.name)}</h2>
           <p data-fr="${echappe(featuredApp.description)}" data-en="${echappe(featuredDescEn)}">${echappe(featuredApp.description)}</p>
           <p class="actions">
             ${lienHorsShell(featuredApp.appUrl, '<span data-i18n="ouvrir">Ouvrir</span>', ' class="action action-ouvrir"')}
+            ${
+              featuredGuide
+                ? lienHorsShell(
+                    featuredGuide.url,
+                    '<span data-i18n="guide">Guide</span>',
+                    ` class="action action-guide guide-lien" title="${echappe(featuredGuide.titre)}"`
+                  )
+                : ''
+            }
           </p>
         </div>
       </div>
     </aside>`
   : '';
+
+const urlsHasard = FAMILY_APPS.filter(
+  a => a.maturity === 'stable' && surOrigine(a.appUrl)
+).map(a => a.appUrl);
+const hasardJson = JSON.stringify(urlsHasard).replace(/</g, '\\u003c');
 
 const carteCoulisse = s => `          <li class="carte">
             ${lienHorsShell(`/${s.nom}/`, '', ` class="carte-hit" aria-label="${echappe(s.titre)}"`)}
@@ -599,7 +632,7 @@ const i18nJson = JSON.stringify({
     themeSystem: 'Système',
     prefs: 'Langue et thème',
     filtre: 'Filtrer les applications',
-    filtrePh: 'Filtrer les applications…',
+    filtrePh: 'Filtrer… (touche /)',
     filtreVide: 'Aucune application ne correspond.',
     filtreEffacer: 'Effacer le filtre',
     filtreSuggestions: 'Essayer une catégorie',
@@ -612,6 +645,11 @@ const i18nJson = JSON.stringify({
     plateformeTous: 'Toutes',
     plateformeWeb: 'PWA',
     plateformeDesktop: 'Bureau',
+    triFiltre: 'Tri',
+    triStable: 'Stables d’abord',
+    triAz: 'A–Z',
+    hasard: 'Au hasard',
+    haut: 'Retour en haut',
     coulissesIntro: 'Infrastructure de la famille — pas des applications à installer.',
     licence: 'Licence MIT',
     nav: 'Catégories',
@@ -624,6 +662,7 @@ const i18nJson = JSON.stringify({
     compte: `${nbApps} applications · ${nbCats} catégories`,
     compteFiltre: '{n} sur ' + nbApps,
     maj: `Mis à jour le ${dateAfficheFr}`,
+    titleCourt: 'GuiiuG',
     categories: libellesFr.categories,
     maturity: libellesFr.maturity,
   },
@@ -650,7 +689,7 @@ const i18nJson = JSON.stringify({
     themeSystem: 'System',
     prefs: 'Language and theme',
     filtre: 'Filter apps',
-    filtrePh: 'Filter apps…',
+    filtrePh: 'Filter… (press /)',
     filtreVide: 'No apps match.',
     filtreEffacer: 'Clear filter',
     filtreSuggestions: 'Try a category',
@@ -663,6 +702,11 @@ const i18nJson = JSON.stringify({
     plateformeTous: 'All',
     plateformeWeb: 'PWA',
     plateformeDesktop: 'Desktop',
+    triFiltre: 'Sort',
+    triStable: 'Stable first',
+    triAz: 'A–Z',
+    hasard: 'Feeling lucky',
+    haut: 'Back to top',
     coulissesIntro: 'Family infrastructure — not apps to install.',
     licence: 'MIT license',
     nav: 'Categories',
@@ -675,6 +719,7 @@ const i18nJson = JSON.stringify({
     compte: `${nbApps} apps · ${nbCats} categories`,
     compteFiltre: '{n} of ' + nbApps,
     maj: `Updated ${dateAfficheEn}`,
+    titleCourt: 'GuiiuG',
     categories: libellesEn.categories,
     maturity: libellesEn.maturity,
   },
@@ -690,6 +735,8 @@ const html = `<!doctype html>
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${FAMILY_ORIGIN}/" />
     <link rel="manifest" href="${FAMILY_ORIGIN}/manifest.webmanifest" />
+    <meta name="theme-color" content="${THEME}" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1220" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="${THEME}" id="theme-color" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -845,6 +892,9 @@ const html = `<!doctype html>
       .skip:focus {
         transform: translateY(0);
       }
+      .chrome-slot {
+        min-height: var(--chrome-h, 0px);
+      }
       .chrome {
         position: sticky;
         top: 0;
@@ -853,6 +903,10 @@ const html = `<!doctype html>
         padding: 0.4rem 0 0.75rem;
         background: var(--chrome);
         border-bottom: 1px solid color-mix(in srgb, var(--bord) 70%, transparent);
+        transition: transform 0.2s ease;
+      }
+      .chrome.is-hidden {
+        transform: translateY(calc(-100% - 1px));
       }
       @supports ((-webkit-backdrop-filter: blur(10px)) or (backdrop-filter: blur(10px))) {
         .chrome {
@@ -961,7 +1015,7 @@ const html = `<!doctype html>
       .sous-titre {
         margin: 0 0 0.55rem;
         color: var(--doux);
-        font-size: 1.05rem;
+        font-size: clamp(1rem, 2.4vw, 1.2rem);
         font-weight: 500;
       }
       .chapeau {
@@ -1066,7 +1120,11 @@ const html = `<!doctype html>
         background: color-mix(in srgb, var(--lien) 10%, var(--barre));
       }
       .projecteur {
-        margin: 0 0 1.75rem;
+        margin: 0 0 2rem;
+        padding: 1.1rem 1.1rem 1.25rem;
+        border: 1px solid var(--bord);
+        border-radius: 1.15rem;
+        background: color-mix(in srgb, var(--lien) 6%, var(--fond-carte));
       }
       .projecteur-label {
         margin: 0 0 0.55rem;
@@ -1127,7 +1185,7 @@ const html = `<!doctype html>
         display: flex;
         flex-direction: column;
         background: var(--fond-carte);
-        transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
       }
       .carte-bureau {
         border-style: dashed;
@@ -1146,19 +1204,12 @@ const html = `<!doctype html>
       .projecteur-carte:hover,
       .projecteur-carte:focus-within {
         border-color: color-mix(in srgb, var(--lien) 55%, var(--bord));
-        transform: translateY(-2px);
         box-shadow: 0 8px 22px color-mix(in srgb, var(--texte) 10%, transparent);
       }
       @media (prefers-reduced-motion: reduce) {
         .carte,
         .projecteur-carte {
           transition: none;
-        }
-        .carte:hover,
-        .carte:focus-within,
-        .projecteur-carte:hover,
-        .projecteur-carte:focus-within {
-          transform: none;
         }
       }
       .carte-hit {
@@ -1169,15 +1220,26 @@ const html = `<!doctype html>
         text-indent: -9999px;
         overflow: hidden;
       }
-      .carte-hit:focus-visible {
-        outline: 3px solid var(--lien);
-        outline-offset: -3px;
-      }
       .carte .visuel,
       .projecteur-carte .visuel {
         display: block;
         aspect-ratio: 1200 / 630;
         background: var(--bord);
+      }
+      .visuel-mono {
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at 30% 25%, color-mix(in srgb, var(--lien) 28%, transparent), transparent 55%),
+          var(--barre);
+      }
+      .mono-lettre {
+        font-family: "Trebuchet MS", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+        font-size: clamp(2.5rem, 8vw, 3.5rem);
+        font-weight: 700;
+        color: var(--lien);
+        opacity: 0.85;
+        line-height: 1;
       }
       .carte .visuel img,
       .projecteur-carte .visuel img {
@@ -1312,6 +1374,26 @@ const html = `<!doctype html>
       .coulisses:focus-within {
         opacity: 0.92;
       }
+      .coulisses-titre {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+      }
+      .coulisses-titre .ico {
+        display: inline-flex;
+        width: 1rem;
+        height: 1rem;
+        color: var(--doux);
+      }
+      .coulisses-titre .ico svg {
+        width: 100%;
+        height: 100%;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.75;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
       .coulisses-intro {
         margin: 0 0 0.9rem;
         color: var(--doux);
@@ -1319,6 +1401,52 @@ const html = `<!doctype html>
         font-weight: 400;
         text-transform: none;
         letter-spacing: 0;
+      }
+      main > section[data-cat-section] {
+        content-visibility: auto;
+        contain-intrinsic-size: auto 28rem;
+      }
+      .haut {
+        position: fixed;
+        right: max(1rem, env(safe-area-inset-right, 0px));
+        bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+        z-index: 30;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        border: 1px solid var(--bord);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--fond-carte) 90%, transparent);
+        color: var(--lien);
+        text-decoration: none;
+        box-shadow: 0 4px 14px color-mix(in srgb, var(--texte) 12%, transparent);
+      }
+      .haut[data-visible='1'] {
+        display: inline-flex;
+      }
+      .haut .ico {
+        width: 1.15rem;
+        height: 1.15rem;
+      }
+      .haut .ico svg {
+        width: 100%;
+        height: 100%;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.75;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .parcours {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin: 0 0 1.25rem;
+      }
+      .parcours .chip-link {
+        text-decoration: none;
       }
       footer {
         margin-top: 3rem;
@@ -1414,12 +1542,6 @@ const html = `<!doctype html>
         font: inherit;
         font-weight: 600;
         cursor: pointer;
-      }
-      .chrome {
-        transition: transform 0.2s ease;
-      }
-      .chrome.is-hidden {
-        transform: translateY(calc(-100% - 1px));
       }
       .marque {
         animation: marque-in 0.55s ease both;
@@ -1518,7 +1640,8 @@ const html = `<!doctype html>
   <body>
     <a class="skip" href="#catalogue" data-i18n="skip">Aller aux applications</a>
 
-    <div class="chrome">
+    <div class="chrome-slot" id="chrome-slot">
+    <div class="chrome" id="chrome">
       <div class="topbar">
         <div class="prefs" role="group" data-i18n-aria="prefs" aria-label="Langue et thème">
           <fieldset>
@@ -1558,7 +1681,7 @@ const html = `<!doctype html>
             type="search"
             id="filtre"
             data-i18n-placeholder="filtrePh"
-            placeholder="Filtrer les applications…"
+            placeholder="Filtrer… (touche /)"
             autocomplete="off"
             spellcheck="false"
           />
@@ -1576,6 +1699,10 @@ const html = `<!doctype html>
             <button type="button" class="chip" data-platform-filter="web" aria-pressed="false" data-i18n="plateformeWeb">PWA</button>
             <button type="button" class="chip" data-platform-filter="desktop" aria-pressed="false" data-i18n="plateformeDesktop">Bureau</button>
           </div>
+          <div class="maturite tri" role="group" data-i18n-aria="triFiltre" aria-label="Tri">
+            <button type="button" class="chip" data-sort="stable" aria-pressed="true" data-i18n="triStable">Stables d’abord</button>
+            <button type="button" class="chip" data-sort="az" aria-pressed="false" data-i18n="triAz">A–Z</button>
+          </div>
         </div>
         <div class="sommaire-wrap" id="sommaire-wrap">
           <nav class="sommaire" data-i18n-aria="nav" aria-label="Catégories">
@@ -1584,6 +1711,7 @@ ${navCats}
         </div>
         <p class="compte" id="compte" data-i18n="compte" aria-live="polite">${nbApps} applications · ${nbCats} catégories</p>
       </div>
+    </div>
     </div>
 
     <header class="hero">
@@ -1614,6 +1742,10 @@ ${navCats}
 
 ${featuredHtml}
 
+    <p class="parcours">
+      <button type="button" class="chip" id="hasard" data-i18n="hasard">Au hasard</button>
+    </p>
+
     <div class="vide" id="filtre-vide" role="status">
       <p data-i18n="filtreVide">Aucune application ne correspond.</p>
       <button type="button" class="vide-effacer" id="filtre-effacer" data-i18n="filtreEffacer">Effacer le filtre</button>
@@ -1629,7 +1761,12 @@ ${
   coulisses.length
     ? `
       <section class="coulisses" aria-labelledby="coulisses">
-        <h2 id="coulisses" data-i18n="coulisses">Dans les coulisses</h2>
+        <h2 id="coulisses" class="coulisses-titre">
+          <span class="ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.1-3.1a5.2 5.2 0 0 1-7.4 7.4L6 21a2.1 2.1 0 0 1-3-3l7.4-7.4a5.2 5.2 0 0 1 4.3-4.3z"/></svg>
+          </span>
+          <span data-i18n="coulisses">Dans les coulisses</span>
+        </h2>
         <p class="coulisses-intro" data-i18n="coulissesIntro">Infrastructure de la famille — pas des applications à installer.</p>
         <ul>
 ${coulisses.map(carteCoulisse).join('\n')}
@@ -1659,21 +1796,34 @@ ${coulisses.map(carteCoulisse).join('\n')}
         <a href="https://github.com/${COMPTE}/${SOI}/blob/main/LICENSE" data-i18n="licence">Licence MIT</a>
       </p>
     </footer>
+    <a class="haut" id="haut" href="#catalogue" data-i18n-aria="haut" aria-label="Retour en haut">
+      <span class="ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+      </span>
+    </a>
 <script>
       (function () {
         var I18N = ${i18nJson};
+        var HASARD = ${hasardJson};
         var root = document.documentElement;
         var themeMeta = document.getElementById('theme-color');
         var filtre = document.getElementById('filtre');
         var vide = document.getElementById('filtre-vide');
         var compte = document.getElementById('compte');
-        var chromeEl = document.querySelector('.chrome');
+        var chromeEl = document.getElementById('chrome');
+        var chromeSlot = document.getElementById('chrome-slot');
         var sommaire = document.querySelector('.sommaire');
         var sommaireWrap = document.getElementById('sommaire-wrap');
+        var haut = document.getElementById('haut');
         var maturityFilter = '';
         var platformFilter = '';
+        var sortMode = 'stable';
+        var activeCat = '';
         var deferredPrompt = null;
         var syncingUrl = false;
+        var compteTimer = null;
+        var titleTimer = null;
+        var titleLong = '';
 
         function lang() {
           return root.lang === 'en' ? 'en' : 'fr';
@@ -1693,7 +1843,9 @@ ${coulisses.map(carteCoulisse).join('\n')}
           try { localStorage.setItem('hub-lang', l); } catch (e) {}
           var t = I18N[l];
           var pwa = isPwa();
-          document.title = t.title;
+          titleLong = t.title;
+          document.title = titleLong;
+          scheduleShortTitle();
           var desc = document.querySelector('meta[name="description"]');
           if (desc) desc.setAttribute('content', t.description);
           document.querySelectorAll('[data-i18n]').forEach(function (el) {
@@ -1733,7 +1885,7 @@ ${coulisses.map(carteCoulisse).join('\n')}
           if (plus && chapeau) {
             plus.textContent = chapeau.classList.contains('is-open') ? t.enSavoirMoins : t.enSavoirPlus;
           }
-          updateCompte();
+          updateCompte(true);
         }
 
         function resolveThemeColor() {
@@ -1760,6 +1912,14 @@ ${coulisses.map(carteCoulisse).join('\n')}
           }
         }
 
+        function scheduleShortTitle() {
+          if (titleTimer) clearTimeout(titleTimer);
+          titleTimer = setTimeout(function () {
+            var t = I18N[lang()];
+            if (t.titleCourt) document.title = t.titleCourt;
+          }, 4000);
+        }
+
         function writeUrl() {
           if (syncingUrl) return;
           var p = new URLSearchParams();
@@ -1767,27 +1927,56 @@ ${coulisses.map(carteCoulisse).join('\n')}
           if (q) p.set('q', q);
           if (maturityFilter) p.set('m', maturityFilter);
           if (platformFilter) p.set('p', platformFilter);
+          if (sortMode && sortMode !== 'stable') p.set('sort', sortMode);
+          if (activeCat) p.set('cat', activeCat);
           var qs = p.toString();
           var next = qs ? location.pathname + '?' + qs + location.hash : location.pathname + location.hash;
           var cur = location.pathname + location.search + location.hash;
           if (next !== cur) history.replaceState(null, '', next);
         }
 
-        function updateCompte() {
-          var t = I18N[lang()];
-          var visible = 0;
-          document.querySelectorAll('main .carte[data-search]').forEach(function (carte) {
-            if (!carte.hidden) visible += 1;
-          });
-          var q = filtre ? filtre.value.trim() : '';
-          var filtered = q !== '' || maturityFilter !== '' || platformFilter !== '';
-          if (compte) {
-            compte.textContent = filtered
-              ? t.compteFiltre.replace('{n}', String(visible))
-              : t.compte;
+        function updateCompte(immediate) {
+          var run = function () {
+            var t = I18N[lang()];
+            var visible = 0;
+            document.querySelectorAll('main .carte[data-search]').forEach(function (carte) {
+              if (!carte.hidden) visible += 1;
+            });
+            var q = filtre ? filtre.value.trim() : '';
+            var filtered = q !== '' || maturityFilter !== '' || platformFilter !== '';
+            if (compte) {
+              compte.textContent = filtered
+                ? t.compteFiltre.replace('{n}', String(visible))
+                : t.compte;
+            }
+            if (vide) vide.setAttribute('data-visible', filtered && visible === 0 ? '1' : '0');
+            writeUrl();
+          };
+          if (immediate) {
+            if (compteTimer) clearTimeout(compteTimer);
+            run();
+            return;
           }
-          if (vide) vide.setAttribute('data-visible', filtered && visible === 0 ? '1' : '0');
-          writeUrl();
+          if (compteTimer) clearTimeout(compteTimer);
+          compteTimer = setTimeout(run, 180);
+        }
+
+        function applySort() {
+          document.querySelectorAll('[data-grille]').forEach(function (ul) {
+            var cards = Array.prototype.slice.call(ul.querySelectorAll('.carte'));
+            cards.sort(function (a, b) {
+              if (sortMode === 'az') {
+                return (a.getAttribute('data-name') || '').localeCompare(b.getAttribute('data-name') || '', 'fr');
+              }
+              var ra = Number(a.getAttribute('data-rang') || 9);
+              var rb = Number(b.getAttribute('data-rang') || 9);
+              if (ra !== rb) return ra - rb;
+              return (a.getAttribute('data-name') || '').localeCompare(b.getAttribute('data-name') || '', 'fr');
+            });
+            cards.forEach(function (c) {
+              ul.appendChild(c);
+            });
+          });
         }
 
         function applyFilters() {
@@ -1849,9 +2038,17 @@ ${coulisses.map(carteCoulisse).join('\n')}
               );
             });
           }
+          if (p.has('sort') && (p.get('sort') === 'az' || p.get('sort') === 'stable')) {
+            sortMode = p.get('sort');
+            document.querySelectorAll('[data-sort]').forEach(function (btn) {
+              btn.setAttribute('aria-pressed', btn.getAttribute('data-sort') === sortMode ? 'true' : 'false');
+            });
+            applySort();
+          }
           applyFilters();
           if (p.has('cat')) {
-            var target = document.getElementById('cat-' + p.get('cat'));
+            activeCat = p.get('cat') || '';
+            var target = document.getElementById('cat-' + activeCat);
             if (target) {
               setTimeout(function () {
                 target.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1877,6 +2074,25 @@ ${coulisses.map(carteCoulisse).join('\n')}
           var overflow = sommaire.scrollWidth > sommaire.clientWidth + 4;
           var atEnd = sommaire.scrollLeft + sommaire.clientWidth >= sommaire.scrollWidth - 4;
           sommaireWrap.setAttribute('data-overflow', overflow && !atEnd ? '1' : '0');
+        }
+
+        function syncChromeHeight() {
+          if (!chromeEl || !chromeSlot) return;
+          chromeSlot.style.setProperty('--chrome-h', chromeEl.offsetHeight + 'px');
+        }
+
+        function saveUi(key, val) {
+          try {
+            sessionStorage.setItem(key, val);
+          } catch (e) {}
+        }
+
+        function loadUi(key) {
+          try {
+            return sessionStorage.getItem(key);
+          } catch (e) {
+            return null;
+          }
         }
 
         document.querySelectorAll('[data-set-lang]').forEach(function (btn) {
@@ -1912,37 +2128,74 @@ ${coulisses.map(carteCoulisse).join('\n')}
             applyFilters();
           });
         });
+        document.querySelectorAll('[data-sort]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            sortMode = btn.getAttribute('data-sort') || 'stable';
+            document.querySelectorAll('[data-sort]').forEach(function (b) {
+              b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
+            });
+            applySort();
+            writeUrl();
+          });
+        });
         var effacer = document.getElementById('filtre-effacer');
         if (effacer) effacer.addEventListener('click', clearFilters);
 
         document.querySelectorAll('[data-suggest-cat]').forEach(function (btn) {
           btn.addEventListener('click', function () {
             clearFilters();
-            var cat = btn.getAttribute('data-suggest-cat');
-            var target = document.getElementById('cat-' + cat);
+            activeCat = btn.getAttribute('data-suggest-cat') || '';
+            var target = document.getElementById('cat-' + activeCat);
             if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            history.replaceState(null, '', location.pathname + '?cat=' + encodeURIComponent(cat));
+            writeUrl();
+          });
+        });
+
+        document.querySelectorAll('.sommaire a[data-cat]').forEach(function (a) {
+          a.addEventListener('click', function () {
+            activeCat = a.getAttribute('data-cat') || '';
+            writeUrl();
           });
         });
 
         var filtresToggle = document.getElementById('filtres-toggle');
         var filtresPanel = document.getElementById('filtres-panel');
         if (filtresToggle && filtresPanel) {
+          if (loadUi('hub-filtres') === '1') {
+            filtresPanel.classList.add('is-open');
+            filtresToggle.setAttribute('aria-expanded', 'true');
+          }
           filtresToggle.addEventListener('click', function () {
             var open = !filtresPanel.classList.contains('is-open');
             filtresPanel.classList.toggle('is-open', open);
             filtresToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            saveUi('hub-filtres', open ? '1' : '0');
+            syncChromeHeight();
           });
         }
 
         var chapeauPlus = document.getElementById('chapeau-plus');
         var chapeau = document.getElementById('chapeau');
         if (chapeauPlus && chapeau) {
+          if (loadUi('hub-chapeau') === '1') {
+            chapeau.classList.add('is-open');
+            chapeauPlus.setAttribute('aria-expanded', 'true');
+            chapeauPlus.textContent = I18N[lang()].enSavoirMoins;
+          }
           chapeauPlus.addEventListener('click', function () {
             var open = !chapeau.classList.contains('is-open');
             chapeau.classList.toggle('is-open', open);
             chapeauPlus.setAttribute('aria-expanded', open ? 'true' : 'false');
             chapeauPlus.textContent = open ? I18N[lang()].enSavoirMoins : I18N[lang()].enSavoirPlus;
+            saveUi('hub-chapeau', open ? '1' : '0');
+          });
+        }
+
+        var hasardBtn = document.getElementById('hasard');
+        if (hasardBtn && HASARD && HASARD.length) {
+          hasardBtn.addEventListener('click', function () {
+            var url = HASARD[Math.floor(Math.random() * HASARD.length)];
+            window.open(url, '_blank', 'noopener,noreferrer');
           });
         }
 
@@ -1971,10 +2224,12 @@ ${coulisses.map(carteCoulisse).join('\n')}
               entries.forEach(function (entry) {
                 if (!entry.isIntersecting) return;
                 var id = entry.target.getAttribute('data-cat-section');
+                activeCat = id || '';
                 links.forEach(function (a) {
                   a.removeAttribute('aria-current');
                 });
                 if (map[id]) map[id].setAttribute('aria-current', 'true');
+                writeUrl();
               });
             },
             { rootMargin: '-20% 0px -65% 0px', threshold: 0 }
@@ -1990,6 +2245,12 @@ ${coulisses.map(carteCoulisse).join('\n')}
           updateSommaireFade();
         }
 
+        syncChromeHeight();
+        if (chromeEl && 'ResizeObserver' in window) {
+          new ResizeObserver(syncChromeHeight).observe(chromeEl);
+        }
+        window.addEventListener('resize', syncChromeHeight);
+
         if (chromeEl && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
           var lastY = window.scrollY;
           window.addEventListener(
@@ -1999,6 +2260,15 @@ ${coulisses.map(carteCoulisse).join('\n')}
               if (y > lastY + 8 && y > 96) chromeEl.classList.add('is-hidden');
               else if (y < lastY - 8) chromeEl.classList.remove('is-hidden');
               lastY = y;
+              if (haut) haut.setAttribute('data-visible', y > window.innerHeight * 1.5 ? '1' : '0');
+            },
+            { passive: true }
+          );
+        } else if (haut) {
+          window.addEventListener(
+            'scroll',
+            function () {
+              haut.setAttribute('data-visible', window.scrollY > window.innerHeight * 1.5 ? '1' : '0');
             },
             { passive: true }
           );
@@ -2085,9 +2355,22 @@ const manifeste = {
 };
 
 const sw = `/* Hub ${COMPTE} — réseau d'abord, repli offline dédié. */
-const CACHE = 'hub-v3';
+const CACHE = 'hub-v4';
 const OFFLINE = '${FAMILY_ORIGIN}/offline.html';
-const PRECACHE = ['${FAMILY_ORIGIN}/', '${FAMILY_ORIGIN}/index.html', OFFLINE, '${FAMILY_ORIGIN}/manifest.webmanifest', '${FAMILY_ORIGIN}/icon-192.png', '${FAMILY_ORIGIN}/icon-512.png'];
+const PRECACHE = [
+  '${FAMILY_ORIGIN}/',
+  '${FAMILY_ORIGIN}/index.html',
+  OFFLINE,
+  '${FAMILY_ORIGIN}/manifest.webmanifest',
+  '${FAMILY_ORIGIN}/icon-192.png',
+  '${FAMILY_ORIGIN}/icon-512.png',${
+    featuredId && imageParApp.has(featuredId)
+      ? `
+  '${FAMILY_ORIGIN}/previews/${featuredId}.jpg',
+  '${FAMILY_ORIGIN}/previews/${featuredId}.webp',`
+      : ''
+  }
+];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
