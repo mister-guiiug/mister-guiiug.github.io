@@ -206,6 +206,12 @@ console.log(`${FAMILY_APPS.length} applications au catalogue :`);
 const enPanne = [];
 /** id de l'app → ses pages de contenu. */
 const pagesParApp = new Map();
+/**
+ * id de l'app → URL de son image de partage (1200×630), si elle répond.
+ * Même fichier que `og:image` de l'app : on le sonde, on ne le recopie pas —
+ * une seule source, celle que chaque application publie déjà.
+ */
+const imageParApp = new Map();
 for (const app of FAMILY_APPS) {
   // Une application de bureau pointe vers son dépôt : rien à sonder sur Pages.
   if (!surOrigine(app.appUrl)) {
@@ -215,9 +221,13 @@ for (const app of FAMILY_APPS) {
   const code = await statut(app.appUrl);
   const pages = code === 200 ? await pagesDe(app.appUrl) : [];
   pagesParApp.set(app.id, pages);
+  const imageUrl = `${app.appUrl}og-image.jpg`;
+  const aImage = code === 200 && (await statut(imageUrl)) === 200;
+  if (aImage) imageParApp.set(app.id, imageUrl);
   console.log(
     `  ${code === 200 ? '✓' : '✗'} ${app.id.padEnd(20)} ${code}` +
-      (pages.length ? ` · ${pages.length} page(s) de contenu` : '')
+      (pages.length ? ` · ${pages.length} page(s) de contenu` : '') +
+      (aImage ? ' · image' : '')
   );
   if (code !== 200) enPanne.push(`${app.id} (${code})`);
 }
@@ -349,15 +359,31 @@ const maturite = m =>
 const carteApp = app => {
   const bureau = app.platform === 'desktop';
   const pages = pagesParApp.get(app.id) ?? [];
+  const image = imageParApp.get(app.id);
   const liste = pages.length
     ? `
             <ul class="pages">
 ${pages.map(p => `              <li><a href="${echappe(p.url)}">${echappe(p.titre)}</a></li>`).join('\n')}
             </ul>`
     : '';
-  return `          <li class="carte">
-            <h3><a href="${echappe(app.appUrl)}">${echappe(app.name)}</a>${maturite(app.maturity)}${bureau ? ' <span class="badge">Application de bureau</span>' : ''}</h3>
-            <p>${echappe(app.description)}</p>${liste}
+  const visuel = image
+    ? `
+            <a class="visuel" href="${echappe(app.appUrl)}" tabindex="-1" aria-hidden="true">
+              <img
+                src="${echappe(image)}"
+                alt=""
+                width="1200"
+                height="630"
+                loading="lazy"
+                decoding="async"
+              />
+            </a>`
+    : '';
+  return `          <li class="carte">${visuel}
+            <div class="corps">
+              <h3><a href="${echappe(app.appUrl)}">${echappe(app.name)}</a>${maturite(app.maturity)}${bureau ? ' <span class="badge">Application de bureau</span>' : ''}</h3>
+              <p>${echappe(app.description)}</p>${liste}
+            </div>
           </li>`;
 };
 
@@ -373,8 +399,10 @@ ${apps.map(carteApp).join('\n')}
 }).filter(Boolean);
 
 const carteCoulisse = s => `          <li class="carte">
-            <h3><a href="/${echappe(s.nom)}/">${echappe(s.titre)}</a></h3>
-            <p>${echappe(s.desc)}</p>
+            <div class="corps">
+              <h3><a href="/${echappe(s.nom)}/">${echappe(s.titre)}</a></h3>
+              <p>${echappe(s.desc)}</p>
+            </div>
           </li>`;
 
 const description =
@@ -471,6 +499,22 @@ const html = `<!doctype html>
       .carte {
         border: 1px solid var(--bord);
         border-radius: 0.75rem;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .carte .visuel {
+        display: block;
+        aspect-ratio: 1200 / 630;
+        background: var(--bord);
+      }
+      .carte .visuel img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .carte .corps {
         padding: 1rem 1.1rem;
       }
       .carte h3 {
