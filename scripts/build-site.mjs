@@ -394,7 +394,7 @@ const jsonLd = JSON.stringify(donneesStructurees).replace(/</g, '\\u003c');
 const maturite = m =>
   m === 'stable'
     ? ''
-    : ` <span class="badge" data-i18n-maturity="${echappe(m)}">${echappe(libellesFr.maturity?.[m] ?? m)}</span>`;
+    : ` <span class="badge badge-${echappe(m)}" data-i18n-maturity="${echappe(m)}">${echappe(libellesFr.maturity?.[m] ?? m)}</span>`;
 
 /**
  * Les liens vers les apps s'ouvrent hors du shell du hub une fois installé :
@@ -402,43 +402,65 @@ const maturite = m =>
  * avalerait sinon toute navigation. `target=_blank` renvoie Chrome / le
  * navigateur, où chaque app reste installable séparément.
  */
-const lienHorsShell = (url, texte) =>
-  `<a href="${echappe(url)}" target="_blank" rel="noopener noreferrer">${texte}</a>`;
+const lienHorsShell = (url, texte, attrs = '') =>
+  `<a href="${echappe(url)}" target="_blank" rel="noopener noreferrer"${attrs}>${texte}</a>`;
 
 const carteApp = app => {
   const bureau = app.platform === 'desktop';
   const pages = pagesParApp.get(app.id) ?? [];
   const image = imageParApp.get(app.id);
   const descEn = DESC_EN[app.id] ?? app.description;
-  const liste = pages.length
+  const premierePage = pages[0];
+  const guide = premierePage
     ? `
-            <ul class="pages">
-${pages.map(p => `              <li>${lienHorsShell(p.url, echappe(p.titre))}</li>`).join('\n')}
-            </ul>`
+            <p class="guide">${lienHorsShell(premierePage.url, '<span data-i18n="guide">Guide</span>', ' class="guide-lien"')}</p>`
     : '';
+  const recherche = [
+    app.name,
+    app.description,
+    descEn,
+    libellesFr.categories?.[app.category] ?? '',
+    libellesEn.categories?.[app.category] ?? '',
+  ]
+    .join(' ')
+    .toLowerCase();
   const visuel = image
     ? `
-            <a class="visuel" href="${echappe(app.appUrl)}" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-hidden="true">
+            <span class="visuel">
               <img
                 src="${echappe(image)}"
                 alt=""
                 width="1200"
                 height="630"
+                sizes="(max-width: 40rem) 100vw, 320px"
                 loading="lazy"
                 decoding="async"
               />
-            </a>`
+            </span>`
     : '';
   const badgeBureau = bureau
     ? ` <span class="badge" data-i18n="badgeDesktop">${echappe('Application de bureau')}</span>`
     : '';
-  return `          <li class="carte">${visuel}
+  return `          <li class="carte" data-search="${echappe(recherche)}">
+            ${lienHorsShell(app.appUrl, '', ` class="carte-hit" aria-label="${echappe(app.name)}"`)}
+${visuel}
             <div class="corps">
-              <h3>${lienHorsShell(app.appUrl, echappe(app.name))}${maturite(app.maturity)}${badgeBureau}</h3>
-              <p data-fr="${echappe(app.description)}" data-en="${echappe(descEn)}">${echappe(app.description)}</p>${liste}
+              <h3><span class="nom">${echappe(app.name)}</span>${maturite(app.maturity)}${badgeBureau}</h3>
+              <p data-fr="${echappe(app.description)}" data-en="${echappe(descEn)}">${echappe(app.description)}</p>${guide}
             </div>
           </li>`;
 };
+
+const catsAvecApps = CATEGORIES.filter(cat =>
+  FAMILY_APPS.some(a => a.category === cat)
+);
+
+const navCats = catsAvecApps
+  .map(
+    cat =>
+      `          <a href="#cat-${cat}" data-i18n-cat="${echappe(cat)}">${echappe(libellesFr.categories?.[cat] ?? cat)}</a>`
+  )
+  .join('\n');
 
 const sections = CATEGORIES.map(cat => {
   const apps = FAMILY_APPS.filter(a => a.category === cat);
@@ -452,8 +474,9 @@ ${apps.map(carteApp).join('\n')}
 }).filter(Boolean);
 
 const carteCoulisse = s => `          <li class="carte">
+            ${lienHorsShell(`/${s.nom}/`, '', ` class="carte-hit" aria-label="${echappe(s.titre)}"`)}
             <div class="corps">
-              <h3>${lienHorsShell(`/${s.nom}/`, echappe(s.titre))}</h3>
+              <h3><span class="nom">${echappe(s.titre)}</span></h3>
               <p>${echappe(s.desc)}</p>
             </div>
           </li>`;
@@ -483,11 +506,14 @@ const i18nJson = JSON.stringify({
     h1: `Les applications de ${COMPTE}`,
     chapeau:
       "Une famille d'applications web installables. Chacune s'installe depuis le navigateur, sans magasin d'applications, et la plupart continuent de fonctionner hors ligne une fois ouvertes. Ce catalogue aussi s'installe : menu ⋮ de Chrome → « Installer l'application ».",
+    chapeauPwa:
+      "Une famille d'applications web installables. Chacune s'ouvre hors de ce catalogue, sans magasin, et la plupart continuent de fonctionner hors ligne.",
+    confiance:
+      'Open source, hébergées en Europe, sans magasin — et sans compte obligatoire pour démarrer.',
     coulisses: 'Dans les coulisses',
     source: 'Code source sur',
-    sponsorBefore: 'Ces applications sont gratuites et open source —',
-    sponsorLink: "m'offrir un café",
-    sponsorAfter: 'aide à les maintenir.',
+    sponsorBefore: 'Ces applications sont gratuites et open source.',
+    sponsorLink: "M'offrir un café",
     badgeDesktop: 'Application de bureau',
     langFr: 'Français',
     langEn: 'English',
@@ -495,6 +521,10 @@ const i18nJson = JSON.stringify({
     themeDark: 'Sombre',
     themeSystem: 'Système',
     prefs: 'Langue et thème',
+    filtre: 'Filtrer les applications',
+    filtrePh: 'Filtrer les applications…',
+    nav: 'Catégories',
+    guide: 'Guide',
     categories: libellesFr.categories,
     maturity: libellesFr.maturity,
   },
@@ -504,11 +534,14 @@ const i18nJson = JSON.stringify({
     h1: `Apps by ${COMPTE}`,
     chapeau:
       'A family of installable web apps. Each one installs from the browser, with no app store, and most keep working offline once opened. This catalogue installs too: Chrome ⋮ menu → “Install app”.',
+    chapeauPwa:
+      'A family of installable web apps. Each one opens outside this catalogue, with no app store, and most keep working offline.',
+    confiance:
+      'Open source, hosted in Europe, no app store — and no account required to get started.',
     coulisses: 'Behind the scenes',
     source: 'Source code on',
-    sponsorBefore: 'These apps are free and open source —',
-    sponsorLink: 'buy me a coffee',
-    sponsorAfter: 'helps keep them going.',
+    sponsorBefore: 'These apps are free and open source.',
+    sponsorLink: 'Buy me a coffee',
     badgeDesktop: 'Desktop app',
     langFr: 'Français',
     langEn: 'English',
@@ -516,6 +549,10 @@ const i18nJson = JSON.stringify({
     themeDark: 'Dark',
     themeSystem: 'System',
     prefs: 'Language and theme',
+    filtre: 'Filter apps',
+    filtrePh: 'Filter apps…',
+    nav: 'Categories',
+    guide: 'Guide (FR)',
     categories: libellesEn.categories,
     maturity: libellesEn.maturity,
   },
@@ -525,7 +562,7 @@ const html = `<!doctype html>
 <html lang="fr" data-theme="system">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>${titrePage}</title>
     <meta name="description" content="${echappe(description)}" />
     <meta name="robots" content="index, follow" />
@@ -560,6 +597,9 @@ const html = `<!doctype html>
           document.documentElement.dataset.theme = t;
           document.documentElement.lang = l === 'en' ? 'en' : 'fr';
         } catch (e) {}
+        if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+          document.documentElement.dataset.pwa = '1';
+        }
       })();
     </script>
     <style>
@@ -571,6 +611,12 @@ const html = `<!doctype html>
         --bord: #d9dbe6;
         --lien: #2f4bd1;
         --barre: #f4f5fa;
+        --alpha-fg: #8a4b08;
+        --alpha-bg: #fff4e5;
+        --alpha-bd: #e0b070;
+        --beta-fg: #0a5c4a;
+        --beta-bg: #e8f7f2;
+        --beta-bd: #7bc4b0;
       }
       html[data-theme='dark'] {
         color-scheme: dark;
@@ -580,6 +626,12 @@ const html = `<!doctype html>
         --bord: #2a2e45;
         --lien: #9fb2ff;
         --barre: #181c2e;
+        --alpha-fg: #ffd9a0;
+        --alpha-bg: #3a2a12;
+        --alpha-bd: #8a6230;
+        --beta-fg: #a8e8d4;
+        --beta-bg: #12352c;
+        --beta-bd: #3d7a68;
       }
       @media (prefers-color-scheme: dark) {
         html[data-theme='system'] {
@@ -590,6 +642,12 @@ const html = `<!doctype html>
           --bord: #2a2e45;
           --lien: #9fb2ff;
           --barre: #181c2e;
+          --alpha-fg: #ffd9a0;
+          --alpha-bg: #3a2a12;
+          --alpha-bd: #8a6230;
+          --beta-fg: #a8e8d4;
+          --beta-bg: #12352c;
+          --beta-bd: #3d7a68;
         }
       }
       * {
@@ -598,18 +656,44 @@ const html = `<!doctype html>
       body {
         margin: 0 auto;
         max-width: 60rem;
-        padding: 2.5rem 1.25rem 4rem;
+        padding:
+          max(1.5rem, env(safe-area-inset-top, 0px))
+          max(1.25rem, env(safe-area-inset-right, 0px))
+          max(4rem, env(safe-area-inset-bottom, 0px))
+          max(1.25rem, env(safe-area-inset-left, 0px));
         background: var(--fond);
         color: var(--texte);
         font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
         line-height: 1.6;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        justify-content: flex-end;
+        margin: 0 0 1.25rem;
+        padding: 0.45rem 0;
+        background: color-mix(in srgb, var(--fond) 86%, transparent);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
       }
       .prefs {
         display: flex;
         flex-wrap: wrap;
         gap: 0.5rem;
         justify-content: flex-end;
-        margin: 0 0 1.25rem;
       }
       .prefs fieldset {
         display: inline-flex;
@@ -670,14 +754,81 @@ const html = `<!doctype html>
         outline: 3px solid var(--lien);
         outline-offset: 2px;
       }
+      .hero {
+        display: flex;
+        gap: 1rem;
+        align-items: flex-start;
+        margin: 0 0 1.5rem;
+      }
+      .hero-icone {
+        width: 4.5rem;
+        height: 4.5rem;
+        border-radius: 1rem;
+        flex-shrink: 0;
+        box-shadow: 0 4px 14px color-mix(in srgb, var(--texte) 12%, transparent);
+      }
+      .hero-texte {
+        min-width: 0;
+      }
       h1 {
-        font-size: clamp(1.6rem, 5vw, 2.3rem);
-        margin: 0 0 0.5rem;
+        font-family: Georgia, 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
+        font-size: clamp(1.7rem, 5vw, 2.45rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.15;
+        margin: 0 0 0.55rem;
       }
       .chapeau {
         color: var(--doux);
         max-width: 42rem;
-        margin: 0 0 1.5rem;
+        margin: 0 0 0.65rem;
+      }
+      .confiance {
+        margin: 0;
+        max-width: 42rem;
+        color: var(--texte);
+        font-size: 0.92rem;
+        font-weight: 500;
+      }
+      .outils {
+        margin: 0 0 1.75rem;
+      }
+      .filtre {
+        display: block;
+        margin: 0 0 0.75rem;
+      }
+      .filtre input {
+        width: 100%;
+        padding: 0.7rem 0.9rem;
+        border: 1px solid var(--bord);
+        border-radius: 0.75rem;
+        background: var(--barre);
+        color: var(--texte);
+        font: inherit;
+      }
+      .filtre input:focus-visible {
+        outline: 3px solid var(--lien);
+        outline-offset: 2px;
+      }
+      .sommaire {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+      }
+      .sommaire a {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.35rem 0.8rem;
+        border: 1px solid var(--bord);
+        border-radius: 999px;
+        background: var(--barre);
+        color: var(--texte);
+        text-decoration: none;
+        font-size: 0.85rem;
+      }
+      .sommaire a:hover {
+        border-color: var(--lien);
+        color: var(--lien);
       }
       h2 {
         font-size: 1.05rem;
@@ -685,21 +836,43 @@ const html = `<!doctype html>
         letter-spacing: 0.05em;
         color: var(--doux);
         margin: 2.25rem 0 0.9rem;
+        scroll-margin-top: 4.5rem;
       }
       ul {
         list-style: none;
         margin: 0;
         padding: 0;
         display: grid;
-        gap: 0.9rem;
+        gap: 1.25rem;
         grid-template-columns: repeat(auto-fill, minmax(min(17rem, 100%), 1fr));
       }
       .carte {
+        position: relative;
         border: 1px solid var(--bord);
-        border-radius: 0.75rem;
+        border-radius: 1rem;
         overflow: hidden;
         display: flex;
         flex-direction: column;
+        background: var(--fond);
+        transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      .carte:hover,
+      .carte:focus-within {
+        border-color: color-mix(in srgb, var(--lien) 55%, var(--bord));
+        transform: translateY(-2px);
+        box-shadow: 0 8px 22px color-mix(in srgb, var(--texte) 10%, transparent);
+      }
+      .carte-hit {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        color: transparent;
+        text-indent: -9999px;
+        overflow: hidden;
+      }
+      .carte-hit:focus-visible {
+        outline: 3px solid var(--lien);
+        outline-offset: -3px;
       }
       .carte .visuel {
         display: block;
@@ -713,26 +886,28 @@ const html = `<!doctype html>
         object-fit: cover;
       }
       .carte .corps {
-        padding: 1rem 1.1rem;
+        position: relative;
+        padding: 1rem 1.1rem 1.15rem;
       }
       .carte h3 {
         font-size: 1.05rem;
         margin: 0 0 0.35rem;
+      }
+      .carte .nom {
+        color: var(--texte);
       }
       .carte p {
         margin: 0;
         color: var(--doux);
         font-size: 0.92rem;
       }
-      .carte .pages {
-        display: block;
-        margin: 0.6rem 0 0;
-        padding: 0;
-        list-style: none;
+      .carte .guide {
+        margin-top: 0.65rem;
         font-size: 0.9rem;
       }
-      .carte .pages li + li {
-        margin-top: 0.25rem;
+      .guide-lien {
+        position: relative;
+        z-index: 2;
       }
       .badge {
         display: inline-block;
@@ -746,6 +921,16 @@ const html = `<!doctype html>
         vertical-align: 0.15em;
         white-space: nowrap;
       }
+      .badge-alpha {
+        color: var(--alpha-fg);
+        background: var(--alpha-bg);
+        border-color: var(--alpha-bd);
+      }
+      .badge-beta {
+        color: var(--beta-fg);
+        background: var(--beta-bg);
+        border-color: var(--beta-bd);
+      }
       a {
         color: var(--lien);
       }
@@ -757,6 +942,11 @@ const html = `<!doctype html>
         margin-top: 3rem;
         padding-top: 0.5rem;
         border-top: 1px solid var(--bord);
+        opacity: 0.72;
+      }
+      .coulisses:hover,
+      .coulisses:focus-within {
+        opacity: 0.92;
       }
       footer {
         margin-top: 3rem;
@@ -766,53 +956,131 @@ const html = `<!doctype html>
         font-size: 0.9rem;
       }
       footer p {
-        margin: 0 0 0.5rem;
+        margin: 0 0 0.85rem;
       }
       footer p:last-child {
         margin-bottom: 0;
       }
+      .sponsor {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin-top: 0.35rem;
+        padding: 0.55rem 0.95rem;
+        border: 1px solid color-mix(in srgb, var(--lien) 35%, var(--bord));
+        border-radius: 999px;
+        background: var(--barre);
+        color: var(--lien);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .sponsor:hover {
+        border-color: var(--lien);
+        background: color-mix(in srgb, var(--lien) 10%, var(--barre));
+      }
+      .sponsor .ico {
+        display: inline-flex;
+        width: 1.05rem;
+        height: 1.05rem;
+      }
+      .sponsor .ico svg {
+        width: 100%;
+        height: 100%;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.75;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      @media (max-width: 36rem) {
+        .hero {
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+        }
+        .chapeau,
+        .confiance {
+          margin-left: auto;
+          margin-right: auto;
+        }
+        .sommaire {
+          justify-content: center;
+        }
+      }
     </style>
   </head>
   <body>
-    <div class="prefs" role="group" data-i18n-aria="prefs" aria-label="Langue et thème">
-      <fieldset>
-        <legend data-i18n="prefs">Langue et thème</legend>
-        <button type="button" data-set-lang="fr" data-i18n-aria="langFr" aria-label="Français" aria-pressed="true" title="Français">
-          <span class="drapeau" aria-hidden="true">🇫🇷</span>
-        </button>
-        <button type="button" data-set-lang="en" data-i18n-aria="langEn" aria-label="English" aria-pressed="false" title="English">
-          <span class="drapeau" aria-hidden="true">🇬🇧</span>
-        </button>
-      </fieldset>
-      <fieldset>
-        <legend data-i18n="prefs">Langue et thème</legend>
-        <button type="button" data-set-theme="light" data-i18n-aria="themeLight" aria-label="Clair" aria-pressed="false" title="Clair">
-          <span class="ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-          </span>
-        </button>
-        <button type="button" data-set-theme="dark" data-i18n-aria="themeDark" aria-label="Sombre" aria-pressed="false" title="Sombre">
-          <span class="ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/></svg>
-          </span>
-        </button>
-        <button type="button" data-set-theme="system" data-i18n-aria="themeSystem" aria-label="Système" aria-pressed="true" title="Système">
-          <span class="ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
-          </span>
-        </button>
-      </fieldset>
+    <div class="topbar">
+      <div class="prefs" role="group" data-i18n-aria="prefs" aria-label="Langue et thème">
+        <fieldset>
+          <legend data-i18n="prefs">Langue et thème</legend>
+          <button type="button" data-set-lang="fr" data-i18n-aria="langFr" aria-label="Français" aria-pressed="true" title="Français">
+            <span class="drapeau" aria-hidden="true">🇫🇷</span>
+          </button>
+          <button type="button" data-set-lang="en" data-i18n-aria="langEn" aria-label="English" aria-pressed="false" title="English">
+            <span class="drapeau" aria-hidden="true">🇬🇧</span>
+          </button>
+        </fieldset>
+        <fieldset>
+          <legend data-i18n="prefs">Langue et thème</legend>
+          <button type="button" data-set-theme="light" data-i18n-aria="themeLight" aria-label="Clair" aria-pressed="false" title="Clair">
+            <span class="ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+            </span>
+          </button>
+          <button type="button" data-set-theme="dark" data-i18n-aria="themeDark" aria-label="Sombre" aria-pressed="false" title="Sombre">
+            <span class="ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/></svg>
+            </span>
+          </button>
+          <button type="button" data-set-theme="system" data-i18n-aria="themeSystem" aria-label="Système" aria-pressed="true" title="Système">
+            <span class="ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+            </span>
+          </button>
+        </fieldset>
+      </div>
     </div>
 
-    <header>
-      <h1 data-i18n="h1">Les applications de ${COMPTE}</h1>
-      <p class="chapeau" data-i18n="chapeau">
-        Une famille d'applications web installables. Chacune s'installe depuis
-        le navigateur, sans magasin d'applications, et la plupart continuent de
-        fonctionner hors ligne une fois ouvertes. Ce catalogue aussi
-        s'installe : menu ⋮ de Chrome → « Installer l'application ».
-      </p>
+    <header class="hero">
+      <img
+        class="hero-icone"
+        src="${FAMILY_ORIGIN}/icon-192.png"
+        width="72"
+        height="72"
+        alt=""
+        decoding="async"
+      />
+      <div class="hero-texte">
+        <h1 data-i18n="h1">Les applications de ${COMPTE}</h1>
+        <p class="chapeau" data-i18n="chapeau" data-i18n-pwa="chapeauPwa">
+          Une famille d'applications web installables. Chacune s'installe depuis
+          le navigateur, sans magasin d'applications, et la plupart continuent de
+          fonctionner hors ligne une fois ouvertes. Ce catalogue aussi
+          s'installe : menu ⋮ de Chrome → « Installer l'application ».
+        </p>
+        <p class="confiance" data-i18n="confiance">
+          Open source, hébergées en Europe, sans magasin — et sans compte obligatoire pour démarrer.
+        </p>
+      </div>
     </header>
+
+    <div class="outils">
+      <label class="filtre">
+        <span class="sr-only" data-i18n="filtre">Filtrer les applications</span>
+        <input
+          type="search"
+          id="filtre"
+          data-i18n-placeholder="filtrePh"
+          placeholder="Filtrer les applications…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </label>
+      <nav class="sommaire" data-i18n-aria="nav" aria-label="Catégories">
+${navCats}
+      </nav>
+    </div>
 
     <main>
 ${sections.join('\n\n')}
@@ -835,11 +1103,13 @@ ${coulisses.map(carteCoulisse).join('\n')}
         <a href="https://github.com/${COMPTE}">github.com/${COMPTE}</a>.
       </p>
       <p>
-        <span data-i18n="sponsorBefore">Ces applications sont gratuites et open source —</span>
-        <a href="${SPONSOR_URL}" rel="noopener noreferrer" data-i18n="sponsorLink"
-          >m'offrir un café</a
-        >
-        <span data-i18n="sponsorAfter">aide à les maintenir.</span>
+        <span data-i18n="sponsorBefore">Ces applications sont gratuites et open source.</span>
+        <a class="sponsor" href="${SPONSOR_URL}" rel="noopener noreferrer">
+          <span class="ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 8h12v8a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V8z"/><path d="M16 9h2.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 5c0 1.5 1.2 2 2 3 .8-1 2-1.5 2-3a2 2 0 1 0-4 0z"/></svg>
+          </span>
+          <span data-i18n="sponsorLink">M'offrir un café</span>
+        </a>
       </p>
     </footer>
     <script>
@@ -856,16 +1126,24 @@ ${coulisses.map(carteCoulisse).join('\n')}
           return root.dataset.theme || 'system';
         }
 
+        function isPwa() {
+          return root.dataset.pwa === '1';
+        }
+
         function applyLang(l) {
           l = l === 'en' ? 'en' : 'fr';
           root.lang = l;
           try { localStorage.setItem('hub-lang', l); } catch (e) {}
           var t = I18N[l];
+          var pwa = isPwa();
           document.title = t.title;
           var desc = document.querySelector('meta[name="description"]');
           if (desc) desc.setAttribute('content', t.description);
           document.querySelectorAll('[data-i18n]').forEach(function (el) {
             var k = el.getAttribute('data-i18n');
+            if (pwa && el.hasAttribute('data-i18n-pwa')) {
+              k = el.getAttribute('data-i18n-pwa');
+            }
             if (t[k]) el.textContent = t[k];
           });
           document.querySelectorAll('[data-i18n-aria]').forEach(function (el) {
@@ -874,6 +1152,10 @@ ${coulisses.map(carteCoulisse).join('\n')}
               el.setAttribute('aria-label', t[k]);
               if (el.hasAttribute('title')) el.setAttribute('title', t[k]);
             }
+          });
+          document.querySelectorAll('[data-i18n-placeholder]').forEach(function (el) {
+            var k = el.getAttribute('data-i18n-placeholder');
+            if (t[k]) el.setAttribute('placeholder', t[k]);
           });
           document.querySelectorAll('[data-i18n-cat]').forEach(function (el) {
             var c = el.getAttribute('data-i18n-cat');
@@ -921,6 +1203,26 @@ ${coulisses.map(carteCoulisse).join('\n')}
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
           if (theme() === 'system') applyTheme('system');
         });
+
+        var filtre = document.getElementById('filtre');
+        if (filtre) {
+          filtre.addEventListener('input', function () {
+            var q = filtre.value.trim().toLowerCase();
+            document.querySelectorAll('.carte[data-search]').forEach(function (carte) {
+              carte.hidden = q !== '' && carte.getAttribute('data-search').indexOf(q) === -1;
+            });
+            document.querySelectorAll('main > section').forEach(function (sec) {
+              if (sec.classList.contains('coulisses')) return;
+              var cartes = sec.querySelectorAll('.carte');
+              if (!cartes.length) return;
+              var visible = false;
+              cartes.forEach(function (c) {
+                if (!c.hidden) visible = true;
+              });
+              sec.hidden = !visible;
+            });
+          });
+        }
 
         applyLang(lang());
         applyTheme(theme());
