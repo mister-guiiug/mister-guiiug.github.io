@@ -1,6 +1,6 @@
 /**
  * Construit le site de la racine — `index.html`, `robots.txt`, `sitemap.xml`,
- * et le fichier de vérification de Search Console —
+ * `llms.txt`, et le fichier de vérification de Search Console —
  * dans un dossier de sortie (`_site` par défaut). Rien n'est commité : le
  * workflow `pages.yml` l'exécute au moment de PUBLIER, chaque nuit et à chaque
  * fusion.
@@ -307,11 +307,19 @@ const donneesStructurees = {
       name: `Les applications de ${COMPTE}`,
       url: `${FAMILY_ORIGIN}/`,
       inLanguage: 'fr',
-      publisher: {
-        '@type': 'Person',
-        name: COMPTE,
-        url: `https://github.com/${COMPTE}`,
+      publisher: { '@id': `${FAMILY_ORIGIN}/#org` },
+      potentialAction: {
+        '@type': 'ViewAction',
+        target: `${FAMILY_ORIGIN}/`,
+        name: `Les applications de ${COMPTE}`,
       },
+    },
+    {
+      '@type': 'Organization',
+      '@id': `${FAMILY_ORIGIN}/#org`,
+      name: COMPTE,
+      url: `${FAMILY_ORIGIN}/`,
+      sameAs: [`https://github.com/${COMPTE}`],
     },
     {
       '@type': 'ItemList',
@@ -376,12 +384,32 @@ const description =
     .join(', ') +
   ', et les autres.';
 
+// Bing SEO/GEO : titre ≥ 50 car. Le H1 visible reste le nom de la famille.
+const titrePage = `Les applications de ${COMPTE} - PWA web installables hors magasin`;
+
+const appsSurOrigine = FAMILY_APPS.filter(a => surOrigine(a.appUrl));
+const llms = [
+  `# Les applications de ${COMPTE}`,
+  '',
+  `> Famille de PWA installables sous ${FAMILY_ORIGIN}/ — hors magasin d'applications, souvent utilisables hors ligne.`,
+  '',
+  '## Accueil',
+  `- Hub : ${FAMILY_ORIGIN}/`,
+  `- Code source : https://github.com/${COMPTE}`,
+  '',
+  '## Applications',
+  ...appsSurOrigine.map(
+    a => `- [${a.name}](${a.appUrl}) : ${a.description}`
+  ),
+  '',
+].join('\n');
+
 const html = `<!doctype html>
 <html lang="fr">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Les applications de ${COMPTE}</title>
+    <title>${titrePage}</title>
     <meta name="description" content="${echappe(description)}" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${FAMILY_ORIGIN}/" />
@@ -389,7 +417,7 @@ const html = `<!doctype html>
     <link rel="icon" href="${FAMILY_ORIGIN}/favicon.ico" sizes="any" />
     <meta property="og:type" content="website" />
 
-    <meta property="og:title" content="Les applications de ${COMPTE}" />
+    <meta property="og:title" content="${titrePage}" />
     <meta property="og:description" content="${echappe(description)}" />
     <meta property="og:url" content="${FAMILY_ORIGIN}/" />
     <meta property="og:image" content="${FAMILY_ORIGIN}/og-image.jpg?v=${IMAGE_EMPREINTE}" />
@@ -398,6 +426,7 @@ const html = `<!doctype html>
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Les applications de ${COMPTE} : leurs icônes, en mosaïque" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${titrePage}" />
     <meta name="twitter:image" content="${FAMILY_ORIGIN}/og-image.jpg?v=${IMAGE_EMPREINTE}" />
     <script type="application/ld+json">${jsonLd}</script>
     <style>
@@ -552,6 +581,7 @@ mkdirSync(SORTIE, { recursive: true });
 writeFileSync(join(SORTIE, 'index.html'), html, 'utf8');
 writeFileSync(join(SORTIE, 'robots.txt'), robots, 'utf8');
 writeFileSync(join(SORTIE, 'sitemap.xml'), sitemap, 'utf8');
+writeFileSync(join(SORTIE, 'llms.txt'), llms, 'utf8');
 // Le contenu exact que Google attend, au caractère près.
 writeFileSync(
   join(SORTIE, VERIFICATION_GOOGLE),
@@ -586,6 +616,6 @@ copyFileSync(
 console.log(
   `\nÉcrit dans ${SORTIE}/ : index.html (${FAMILY_APPS.length} applications en ` +
     `${sections.length} catégories, ${coulisses.length} en coulisses), ` +
-    `robots.txt (${sites.filter(s => s.plan).length + 1} plans de site), sitemap.xml, ` +
+    `robots.txt (${sites.filter(s => s.plan).length + 1} plans de site), sitemap.xml, llms.txt, ` +
     `${VERIFICATION_GOOGLE}, BingSiteAuth.xml, clé IndexNow, og-image.jpg, favicons`
 );
