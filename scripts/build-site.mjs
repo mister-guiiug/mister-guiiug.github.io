@@ -615,11 +615,11 @@ const i18nJson = JSON.stringify({
     marque: 'GuiiuG',
     sousTitre: `Les applications de ${COMPTE}`,
     chapeau:
-      "Une famille d'applications web installables. Chacune s'installe depuis le navigateur, sans magasin d'applications, et la plupart continuent de fonctionner hors ligne une fois ouvertes. Ce catalogue aussi s'installe : menu ⋮ de Chrome → « Installer l'application ».",
+      "Des applications web à installer depuis le navigateur. Pas de magasin, et la plupart restent utilisables hors ligne.",
     chapeauPwa:
-      "Une famille d'applications web installables. Chacune s'ouvre hors de ce catalogue, sans magasin, et la plupart continuent de fonctionner hors ligne.",
+      "Des applications web, chacune ouverte en dehors de ce catalogue. Pas de magasin, et la plupart restent utilisables hors ligne.",
     confiance:
-      'Open source, hébergées en Europe, sans magasin — et sans compte obligatoire pour démarrer.',
+      "Open source, hébergées en Europe. Aucun compte n'est nécessaire pour commencer.",
     coulisses: 'Dans les coulisses',
     source: 'Code source sur',
     sponsorBefore: 'Ces applications sont gratuites et open source.',
@@ -631,8 +631,8 @@ const i18nJson = JSON.stringify({
     themeDark: 'Sombre',
     themeSystem: 'Système',
     prefs: 'Langue et thème',
-    filtre: 'Filtrer les applications',
-    filtrePh: 'Filtrer… (touche /)',
+    filtre: 'Rechercher une application',
+    filtrePh: 'Rechercher…',
     filtreVide: 'Aucune application ne correspond.',
     filtreEffacer: 'Effacer le filtre',
     filtreSuggestions: 'Essayer une catégorie',
@@ -672,11 +672,11 @@ const i18nJson = JSON.stringify({
     marque: 'GuiiuG',
     sousTitre: `Apps by ${COMPTE}`,
     chapeau:
-      'A family of installable web apps. Each one installs from the browser, with no app store, and most keep working offline once opened. This catalogue installs too: Chrome ⋮ menu → “Install app”.',
+      'Web apps you install from the browser. No app store, and most keep working offline.',
     chapeauPwa:
-      'A family of installable web apps. Each one opens outside this catalogue, with no app store, and most keep working offline.',
+      'Web apps, each one opened outside this catalogue. No app store, and most keep working offline.',
     confiance:
-      'Open source, hosted in Europe, no app store — and no account required to get started.',
+      'Open source, hosted in Europe. No account needed to get started.',
     coulisses: 'Behind the scenes',
     source: 'Source code on',
     sponsorBefore: 'These apps are free and open source.',
@@ -688,8 +688,8 @@ const i18nJson = JSON.stringify({
     themeDark: 'Dark',
     themeSystem: 'System',
     prefs: 'Language and theme',
-    filtre: 'Filter apps',
-    filtrePh: 'Filter… (press /)',
+    filtre: 'Search apps',
+    filtrePh: 'Search…',
     filtreVide: 'No apps match.',
     filtreEffacer: 'Clear filter',
     filtreSuggestions: 'Try a category',
@@ -766,6 +766,8 @@ const html = `<!doctype html>
           document.documentElement.dataset.theme = t;
           document.documentElement.lang = l === 'en' ? 'en' : 'fr';
         } catch (e) {}
+        var mac = /Mac|iPhone|iPad/.test(navigator.platform || '') || /Mac/.test(navigator.userAgent || '');
+        document.documentElement.dataset.mod = mac ? 'meta' : 'ctrl';
         if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
           document.documentElement.dataset.pwa = '1';
         }
@@ -900,7 +902,7 @@ const html = `<!doctype html>
         top: 0;
         z-index: 20;
         margin: 0 0 1.25rem;
-        padding: 0.4rem 0 0.75rem;
+        padding: 0.4rem 1rem 0.75rem;
         background: var(--chrome);
         border-bottom: 1px solid color-mix(in srgb, var(--bord) 70%, transparent);
         transition: transform 0.2s ease;
@@ -917,11 +919,25 @@ const html = `<!doctype html>
       }
       .topbar {
         display: flex;
-        justify-content: flex-end;
-        margin: 0 0 0.65rem;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin: 0 0 0.75rem;
+        min-width: 0;
+      }
+      .identite {
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .identite-texte {
+        min-width: 0;
       }
       .prefs {
         display: flex;
+        flex: 0 0 auto;
         flex-wrap: wrap;
         gap: 0.5rem;
         justify-content: flex-end;
@@ -995,9 +1011,9 @@ const html = `<!doctype html>
         margin: 0 0 1.35rem;
       }
       .hero-icone {
-        width: 4.5rem;
-        height: 4.5rem;
-        border-radius: 1rem;
+        width: 2.75rem;
+        height: 2.75rem;
+        border-radius: 0.7rem;
         flex-shrink: 0;
         box-shadow: 0 4px 14px color-mix(in srgb, var(--texte) 12%, transparent);
       }
@@ -1006,17 +1022,20 @@ const html = `<!doctype html>
       }
       .marque {
         font-family: "Trebuchet MS", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-        font-size: clamp(2rem, 6vw, 2.75rem);
+        font-size: clamp(1.35rem, 2.6vw, 1.65rem);
         font-weight: 700;
         letter-spacing: -0.03em;
         line-height: 1.05;
-        margin: 0 0 0.25rem;
+        margin: 0;
       }
       .sous-titre {
-        margin: 0 0 0.55rem;
+        margin: 0.12rem 0 0;
         color: var(--doux);
-        font-size: clamp(1rem, 2.4vw, 1.2rem);
+        font-size: 0.92rem;
         font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .chapeau {
         color: var(--doux);
@@ -1049,19 +1068,98 @@ const html = `<!doctype html>
       .outils {
         display: grid;
         gap: 0.65rem;
+        min-width: 0;
+      }
+      .filtre {
+        position: relative;
+        display: block;
+        min-width: 0;
+        margin: 0 0 0.75rem;
+      }
+      .filtre-ico {
+        position: absolute;
+        left: 0.85rem;
+        top: 50%;
+        width: 1.05rem;
+        height: 1.05rem;
+        transform: translateY(-50%);
+        color: var(--doux);
+        pointer-events: none;
+        display: flex;
+      }
+      .filtre-ico svg {
+        width: 100%;
+        height: 100%;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.75;
+        stroke-linecap: round;
+        stroke-linejoin: round;
       }
       .filtre input {
         width: 100%;
-        padding: 0.7rem 0.9rem;
-        border: 1px solid var(--bord);
-        border-radius: 0.75rem;
+        min-height: 2.75rem;
+        padding: 0.55rem 5.6rem 0.55rem 2.55rem;
+        border: 1px solid color-mix(in srgb, var(--bord) 75%, var(--lien));
+        border-radius: 0.9rem;
         background: var(--fond-carte);
         color: var(--texte);
         font: inherit;
+        box-shadow:
+          0 1px 2px color-mix(in srgb, var(--texte) 6%, transparent),
+          0 10px 28px color-mix(in srgb, var(--lien) 7%, transparent);
+      }
+      .filtre input::-webkit-search-cancel-button {
+        -webkit-appearance: none;
+        appearance: none;
+      }
+      .filtre input::placeholder {
+        color: var(--doux);
+      }
+      .filtre:focus-within input {
+        padding-right: 0.95rem;
+        border-color: var(--lien);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--lien) 28%, transparent);
       }
       .filtre input:focus-visible {
-        outline: 3px solid var(--lien);
-        outline-offset: 2px;
+        outline: none;
+      }
+      .filtre-kbd {
+        position: absolute;
+        right: 0.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+        display: inline-flex;
+        gap: 0.22rem;
+        margin: 0;
+        pointer-events: none;
+      }
+      .filtre-kbd span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.35rem;
+        padding: 0.08rem 0.38rem;
+        border: 1px solid var(--bord);
+        border-bottom-width: 2px;
+        border-radius: 0.35rem;
+        background: var(--barre);
+        color: var(--doux);
+        font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
+        font-size: 0.68rem;
+        line-height: 1.45;
+      }
+      .filtre-kbd [data-mod='meta'] {
+        display: none;
+      }
+      html[data-mod='meta'] .filtre-kbd [data-mod='ctrl'] {
+        display: none;
+      }
+      html[data-mod='meta'] .filtre-kbd [data-mod='meta'] {
+        display: inline-flex;
+      }
+      .filtre:focus-within .filtre-kbd {
+        opacity: 0;
       }
       .compte {
         margin: 0;
@@ -1069,10 +1167,23 @@ const html = `<!doctype html>
         font-size: 0.85rem;
       }
       .maturite {
-        display: flex;
+        display: inline-flex;
         flex-wrap: wrap;
-        gap: 0.35rem;
+        gap: 0.3rem;
         align-items: center;
+        width: fit-content;
+        max-width: 100%;
+        padding: 0.28rem 0.4rem 0.28rem 0.7rem;
+        border: 1px solid var(--bord);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--barre) 65%, var(--fond-carte));
+      }
+      .rail-label {
+        margin-right: 0.15rem;
+        color: var(--doux);
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
       }
       .chip {
         appearance: none;
@@ -1095,7 +1206,8 @@ const html = `<!doctype html>
         flex-wrap: nowrap;
         gap: 0.4rem;
         overflow-x: auto;
-        padding-bottom: 0.15rem;
+        padding: 0.15rem 0.35rem;
+        scroll-padding-inline: 0.35rem;
         scrollbar-width: thin;
         -webkit-overflow-scrolling: touch;
       }
@@ -1492,26 +1604,108 @@ const html = `<!doctype html>
         stroke-linecap: round;
         stroke-linejoin: round;
       }
+      .outils-ligne {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        min-width: 0;
+      }
+      .outils-ligne .sommaire-wrap {
+        flex: 1 1 auto;
+      }
       .filtres-toggle {
-        display: none;
-        appearance: none;
-        width: 100%;
-        padding: 0.55rem 0.85rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        flex: 0 0 auto;
+        min-height: 2.25rem;
+        padding: 0.3rem 0.75rem;
         border: 1px solid var(--bord);
-        border-radius: 0.75rem;
+        border-radius: 999px;
         background: var(--barre);
         color: var(--texte);
         font: inherit;
+        font-size: 0.85rem;
         font-weight: 600;
         cursor: pointer;
-        text-align: left;
+      }
+      .filtres-toggle .ico {
+        display: inline-flex;
+        width: 0.95rem;
+        height: 0.95rem;
+      }
+      .filtres-toggle .ico svg {
+        width: 100%;
+        height: 100%;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.75;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .filtres-toggle[aria-expanded='true'],
+      .filtres-toggle[data-count]:not([data-count='0']) {
+        border-color: var(--lien);
+        color: var(--lien);
+        background: color-mix(in srgb, var(--lien) 10%, var(--barre));
+      }
+      .filtres-badge {
+        display: none;
+        min-width: 1.15rem;
+        height: 1.15rem;
+        padding: 0 0.28rem;
+        border-radius: 999px;
+        background: var(--lien);
+        color: var(--fond);
+        font-size: 0.68rem;
+        font-weight: 700;
+        line-height: 1;
+        align-items: center;
+        justify-content: center;
+      }
+      .filtres-toggle[data-count]:not([data-count='0']) .filtres-badge {
+        display: inline-flex;
       }
       .filtres-panel {
         display: grid;
+        grid-template-rows: 0fr;
+        margin-top: -0.65rem;
+        transition: grid-template-rows 0.22s ease, margin-top 0.22s ease;
+      }
+      .filtres-panel.is-open {
+        grid-template-rows: 1fr;
+        margin-top: 0;
+      }
+      .filtres-panel-inner {
+        overflow: hidden;
+        min-height: 0;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
         gap: 0.55rem;
       }
       .sommaire-wrap {
         position: relative;
+        min-width: 0;
+      }
+      .sommaire-wrap::before,
+      .sommaire-wrap::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2.25rem;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.15s;
+        z-index: 1;
+      }
+      .sommaire-wrap::before {
+        left: 0;
+        background: linear-gradient(to left, transparent, var(--chrome));
+      }
+      .sommaire-wrap[data-overflow-start='1']::before {
+        opacity: 1;
       }
       .sommaire-wrap::after {
         content: '';
@@ -1564,7 +1758,8 @@ const html = `<!doctype html>
           opacity: 1;
           transition: none;
         }
-        .chrome {
+        .chrome,
+        .filtres-panel {
           transition: none;
         }
       }
@@ -1575,13 +1770,17 @@ const html = `<!doctype html>
         .sponsor,
         .prefs fieldset,
         .filtre input,
+        .filtre-kbd span,
+        .maturite,
+        .filtres-toggle,
         .installer {
           border: 1px solid CanvasText;
         }
         .carte-hit:focus-visible,
         a:focus-visible,
         .prefs button:focus-visible,
-        .chip:focus-visible {
+        .chip:focus-visible,
+        .filtre input:focus-visible {
           outline: 3px solid Highlight;
         }
         .sommaire a[aria-current='true'],
@@ -1603,8 +1802,7 @@ const html = `<!doctype html>
           text-align: center;
         }
         .chapeau,
-        .confiance,
-        .sous-titre {
+        .confiance {
           margin-left: auto;
           margin-right: auto;
         }
@@ -1622,14 +1820,22 @@ const html = `<!doctype html>
         .chapeau-plus {
           display: inline;
         }
-        .filtres-toggle {
-          display: block;
+        .topbar {
+          flex-wrap: wrap;
         }
-        .filtres-panel {
+        .filtre {
+          flex: 1 1 100%;
+        }
+        .filtre-kbd {
           display: none;
         }
-        .filtres-panel.is-open {
-          display: grid;
+        .filtre input,
+        .filtre:focus-within input {
+          padding-right: 0.95rem;
+        }
+        .filtres-panel.is-open .filtres-panel-inner {
+          flex-direction: column;
+          align-items: flex-start;
         }
         .projecteur-carte {
           grid-template-columns: 1fr;
@@ -1643,6 +1849,20 @@ const html = `<!doctype html>
     <div class="chrome-slot" id="chrome-slot">
     <div class="chrome" id="chrome">
       <div class="topbar">
+        <div class="identite">
+          <img
+            class="hero-icone"
+            src="${FAMILY_ORIGIN}/icon-192.png"
+            width="44"
+            height="44"
+            alt=""
+            decoding="async"
+          />
+          <div class="identite-texte">
+            <h1 class="marque" data-i18n="marque">GuiiuG</h1>
+            <p class="sous-titre" data-i18n="sousTitre">Les applications de ${COMPTE}</p>
+          </div>
+        </div>
         <div class="prefs" role="group" data-i18n-aria="prefs" aria-label="Langue et thème">
           <fieldset>
             <legend data-i18n="prefs">Langue et thème</legend>
@@ -1674,40 +1894,64 @@ const html = `<!doctype html>
         </div>
       </div>
 
-      <div class="outils">
-        <label class="filtre">
-          <span class="sr-only" data-i18n="filtre">Filtrer les applications</span>
+      <label class="filtre">
+          <span class="sr-only" data-i18n="filtre">Rechercher une application</span>
+          <span class="filtre-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>
+          </span>
           <input
             type="search"
             id="filtre"
             data-i18n-placeholder="filtrePh"
-            placeholder="Filtrer… (touche /)"
+            placeholder="Rechercher…"
+            aria-keyshortcuts="Control+K Meta+K"
             autocomplete="off"
             spellcheck="false"
+            enterkeyhint="search"
           />
-        </label>
-        <button type="button" class="filtres-toggle" id="filtres-toggle" data-i18n="filtresPlus" aria-expanded="false" aria-controls="filtres-panel">Filtres</button>
-        <div class="filtres-panel" id="filtres-panel">
+          <kbd class="filtre-kbd" aria-hidden="true">
+            <span data-mod="ctrl">Ctrl</span>
+            <span data-mod="meta">⌘</span>
+            <span>K</span>
+          </kbd>
+      </label>
+
+      <div class="outils">
+        <div class="outils-ligne">
+        <button type="button" class="filtres-toggle" id="filtres-toggle" aria-expanded="false" aria-controls="filtres-panel">
+          <span class="ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 5h16l-6.2 7.2V19l-3.6 2v-8.8z"/></svg>
+          </span>
+          <span data-i18n="filtresPlus">Filtres</span>
+          <span class="filtres-badge" id="filtres-badge"></span>
+        </button>
+        <div class="sommaire-wrap" id="sommaire-wrap">
+          <nav class="sommaire" data-i18n-aria="nav" aria-label="Catégories">
+${navCats}
+          </nav>
+        </div>
+        </div>
+        <div class="filtres-panel" id="filtres-panel" inert>
+          <div class="filtres-panel-inner">
           <div class="maturite" role="group" data-i18n-aria="maturiteFiltre" aria-label="Maturité">
+            <span class="rail-label" aria-hidden="true" data-i18n="maturiteFiltre">Maturité</span>
             <button type="button" class="chip" data-maturity-filter="" aria-pressed="true" data-i18n="maturiteTous">Toutes</button>
             <button type="button" class="chip" data-maturity-filter="stable" aria-pressed="false" data-i18n-maturity="stable">Stable</button>
             <button type="button" class="chip" data-maturity-filter="alpha" aria-pressed="false" data-i18n-maturity="alpha">Alpha</button>
             <button type="button" class="chip" data-maturity-filter="beta" aria-pressed="false" data-i18n-maturity="beta">Bêta</button>
           </div>
           <div class="maturite plateforme" role="group" data-i18n-aria="plateformeFiltre" aria-label="Plateforme">
+            <span class="rail-label" aria-hidden="true" data-i18n="plateformeFiltre">Plateforme</span>
             <button type="button" class="chip" data-platform-filter="" aria-pressed="true" data-i18n="plateformeTous">Toutes</button>
             <button type="button" class="chip" data-platform-filter="web" aria-pressed="false" data-i18n="plateformeWeb">PWA</button>
             <button type="button" class="chip" data-platform-filter="desktop" aria-pressed="false" data-i18n="plateformeDesktop">Bureau</button>
           </div>
           <div class="maturite tri" role="group" data-i18n-aria="triFiltre" aria-label="Tri">
+            <span class="rail-label" aria-hidden="true" data-i18n="triFiltre">Tri</span>
             <button type="button" class="chip" data-sort="stable" aria-pressed="true" data-i18n="triStable">Stables d’abord</button>
             <button type="button" class="chip" data-sort="az" aria-pressed="false" data-i18n="triAz">A–Z</button>
           </div>
-        </div>
-        <div class="sommaire-wrap" id="sommaire-wrap">
-          <nav class="sommaire" data-i18n-aria="nav" aria-label="Catégories">
-${navCats}
-          </nav>
+          </div>
         </div>
         <p class="compte" id="compte" data-i18n="compte" aria-live="polite">${nbApps} applications · ${nbCats} catégories</p>
       </div>
@@ -1715,26 +1959,13 @@ ${navCats}
     </div>
 
     <header class="hero">
-      <img
-        class="hero-icone"
-        src="${FAMILY_ORIGIN}/icon-192.png"
-        width="72"
-        height="72"
-        alt=""
-        decoding="async"
-      />
       <div class="hero-texte">
-        <h1 class="marque" data-i18n="marque">GuiiuG</h1>
-        <p class="sous-titre" data-i18n="sousTitre">Les applications de ${COMPTE}</p>
         <p class="chapeau" id="chapeau" data-i18n="chapeau" data-i18n-pwa="chapeauPwa">
-          Une famille d'applications web installables. Chacune s'installe depuis
-          le navigateur, sans magasin d'applications, et la plupart continuent de
-          fonctionner hors ligne une fois ouvertes. Ce catalogue aussi
-          s'installe : menu ⋮ de Chrome → « Installer l'application ».
+          Des applications web à installer depuis le navigateur. Pas de magasin, et la plupart restent utilisables hors ligne.
         </p>
         <button type="button" class="chapeau-plus" id="chapeau-plus" data-i18n="enSavoirPlus" aria-expanded="false" aria-controls="chapeau">En savoir plus</button>
         <p class="confiance" data-i18n="confiance">
-          Open source, hébergées en Europe, sans magasin — et sans compte obligatoire pour démarrer.
+          Open source, hébergées en Europe. Aucun compte n'est nécessaire pour commencer.
         </p>
         <button type="button" class="installer" id="installer" data-i18n="installer" hidden>Installer le catalogue</button>
       </div>
@@ -1977,6 +2208,7 @@ ${coulisses.map(carteCoulisse).join('\n')}
               ul.appendChild(c);
             });
           });
+          syncFiltresBadge();
         }
 
         function applyFilters() {
@@ -2000,6 +2232,7 @@ ${coulisses.map(carteCoulisse).join('\n')}
             sec.hidden = !visible;
           });
           updateCompte();
+          syncFiltresBadge();
         }
 
         function clearFilters() {
@@ -2046,6 +2279,7 @@ ${coulisses.map(carteCoulisse).join('\n')}
             applySort();
           }
           applyFilters();
+          if (maturityFilter || platformFilter || sortMode !== 'stable') setFiltresOpen(true);
           if (p.has('cat')) {
             activeCat = p.get('cat') || '';
             var target = document.getElementById('cat-' + activeCat);
@@ -2073,7 +2307,9 @@ ${coulisses.map(carteCoulisse).join('\n')}
           if (!sommaire || !sommaireWrap) return;
           var overflow = sommaire.scrollWidth > sommaire.clientWidth + 4;
           var atEnd = sommaire.scrollLeft + sommaire.clientWidth >= sommaire.scrollWidth - 4;
+          var atStart = sommaire.scrollLeft <= 4;
           sommaireWrap.setAttribute('data-overflow', overflow && !atEnd ? '1' : '0');
+          sommaireWrap.setAttribute('data-overflow-start', overflow && !atStart ? '1' : '0');
         }
 
         function syncChromeHeight() {
@@ -2160,17 +2396,33 @@ ${coulisses.map(carteCoulisse).join('\n')}
 
         var filtresToggle = document.getElementById('filtres-toggle');
         var filtresPanel = document.getElementById('filtres-panel');
+        var filtresBadge = document.getElementById('filtres-badge');
+
+        function syncFiltresBadge() {
+          if (!filtresToggle) return;
+          var n = (maturityFilter ? 1 : 0) + (platformFilter ? 1 : 0) + (sortMode !== 'stable' ? 1 : 0);
+          if (n) filtresToggle.setAttribute('data-count', String(n));
+          else filtresToggle.removeAttribute('data-count');
+          if (filtresBadge) filtresBadge.textContent = n ? String(n) : '';
+        }
+
+        function setFiltresOpen(open) {
+          if (!filtresToggle || !filtresPanel) return;
+          filtresPanel.classList.toggle('is-open', open);
+          filtresToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+          if (open) filtresPanel.removeAttribute('inert');
+          else filtresPanel.setAttribute('inert', '');
+          saveUi('hub-filtres', open ? '1' : '0');
+          syncChromeHeight();
+        }
+
         if (filtresToggle && filtresPanel) {
-          if (loadUi('hub-filtres') === '1') {
-            filtresPanel.classList.add('is-open');
-            filtresToggle.setAttribute('aria-expanded', 'true');
-          }
+          if (loadUi('hub-filtres') === '1') setFiltresOpen(true);
           filtresToggle.addEventListener('click', function () {
-            var open = !filtresPanel.classList.contains('is-open');
-            filtresPanel.classList.toggle('is-open', open);
-            filtresToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-            saveUi('hub-filtres', open ? '1' : '0');
-            syncChromeHeight();
+            setFiltresOpen(!filtresPanel.classList.contains('is-open'));
+          });
+          filtresPanel.addEventListener('transitionend', function (e) {
+            if (e.propertyName === 'grid-template-rows') syncChromeHeight();
           });
         }
 
@@ -2200,6 +2452,14 @@ ${coulisses.map(carteCoulisse).join('\n')}
         }
 
         document.addEventListener('keydown', function (e) {
+          var mod = e.ctrlKey || e.metaKey;
+          if (mod && !e.altKey && !e.shiftKey && (e.key === 'k' || e.key === 'K')) {
+            if (!filtre) return;
+            e.preventDefault();
+            filtre.focus();
+            filtre.select();
+            return;
+          }
           if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
             var tag = (e.target && e.target.tagName) || '';
             if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
