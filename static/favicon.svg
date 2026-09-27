@@ -1,4 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Fond arrondi famille (#2f4bd1). -->
   <rect width="32" height="32" rx="6" fill="#2f4bd1"/>
-  <path fill="#fff" d="M8 22V10h2.2l4.3 8.2L18.8 10H21v12h-2.1v-7.6L14.9 22h-1.8l-4-7.6V22H8z"/>
+  <!--
+    M original, sigil anguleux (pas la marque Babidi).
+    Boîte du glyphe ≈ 6.5–25.5 × 7–25 → centrée sur (16,16).
+  -->
+  <path
+    fill="#fff"
+    d="M6.5 25
+       V7
+       H11.2
+       L16 17.2
+       L20.8 7
+       H25.5
+       V25
+       H21.8
+       V12.6
+       L16 22.4
+       L10.2 12.6
+       V25
+       Z"
+  />
 </svg>
