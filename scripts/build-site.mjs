@@ -45,6 +45,9 @@ const SORTIE = process.argv[2] ?? '_site';
 const COMPTE = 'mister-guiiug';
 const SOCLE = 'dev-pwa-config';
 const SOI = `${COMPTE}.github.io`;
+/** Handle Buy Me a Coffee de la famille — même valeur que `FUNDING.yml`. */
+const SPONSOR_URL = 'https://buymeacoffee.com/mister.guiiug';
+const THEME = '#2f4bd1';
 const JETON = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? '';
 
 /**
@@ -356,6 +359,15 @@ const maturite = m =>
     ? ''
     : ` <span class="badge">${echappe(libelles.maturity?.[m] ?? m)}</span>`;
 
+/**
+ * Les liens vers les apps s'ouvrent hors du shell du hub une fois installé :
+ * le hub et les apps partagent l'origine `github.io`, donc un `scope: "/"`
+ * avalerait sinon toute navigation. `target=_blank` renvoie Chrome / le
+ * navigateur, où chaque app reste installable séparément.
+ */
+const lienHorsShell = (url, texte) =>
+  `<a href="${echappe(url)}" target="_blank" rel="noopener noreferrer">${texte}</a>`;
+
 const carteApp = app => {
   const bureau = app.platform === 'desktop';
   const pages = pagesParApp.get(app.id) ?? [];
@@ -363,12 +375,12 @@ const carteApp = app => {
   const liste = pages.length
     ? `
             <ul class="pages">
-${pages.map(p => `              <li><a href="${echappe(p.url)}">${echappe(p.titre)}</a></li>`).join('\n')}
+${pages.map(p => `              <li>${lienHorsShell(p.url, echappe(p.titre))}</li>`).join('\n')}
             </ul>`
     : '';
   const visuel = image
     ? `
-            <a class="visuel" href="${echappe(app.appUrl)}" tabindex="-1" aria-hidden="true">
+            <a class="visuel" href="${echappe(app.appUrl)}" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-hidden="true">
               <img
                 src="${echappe(image)}"
                 alt=""
@@ -381,7 +393,7 @@ ${pages.map(p => `              <li><a href="${echappe(p.url)}">${echappe(p.titr
     : '';
   return `          <li class="carte">${visuel}
             <div class="corps">
-              <h3><a href="${echappe(app.appUrl)}">${echappe(app.name)}</a>${maturite(app.maturity)}${bureau ? ' <span class="badge">Application de bureau</span>' : ''}</h3>
+              <h3>${lienHorsShell(app.appUrl, echappe(app.name))}${maturite(app.maturity)}${bureau ? ' <span class="badge">Application de bureau</span>' : ''}</h3>
               <p>${echappe(app.description)}</p>${liste}
             </div>
           </li>`;
@@ -400,7 +412,7 @@ ${apps.map(carteApp).join('\n')}
 
 const carteCoulisse = s => `          <li class="carte">
             <div class="corps">
-              <h3><a href="/${echappe(s.nom)}/">${echappe(s.titre)}</a></h3>
+              <h3>${lienHorsShell(`/${s.nom}/`, echappe(s.titre))}</h3>
               <p>${echappe(s.desc)}</p>
             </div>
           </li>`;
@@ -424,6 +436,12 @@ const html = `<!doctype html>
     <meta name="description" content="${echappe(description)}" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${FAMILY_ORIGIN}/" />
+    <link rel="manifest" href="${FAMILY_ORIGIN}/manifest.webmanifest" />
+    <meta name="theme-color" content="${THEME}" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="GuiiuG" />
+    <link rel="apple-touch-icon" href="${FAMILY_ORIGIN}/apple-touch-icon.png" />
     <link rel="icon" href="${FAMILY_ORIGIN}/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="${FAMILY_ORIGIN}/favicon.ico" sizes="any" />
     <meta property="og:type" content="website" />
@@ -567,6 +585,12 @@ const html = `<!doctype html>
         color: var(--doux);
         font-size: 0.9rem;
       }
+      footer p {
+        margin: 0 0 0.5rem;
+      }
+      footer p:last-child {
+        margin-bottom: 0;
+      }
     </style>
   </head>
   <body>
@@ -575,7 +599,8 @@ const html = `<!doctype html>
       <p class="chapeau">
         Une famille d'applications web installables. Chacune s'installe depuis
         le navigateur, sans magasin d'applications, et la plupart continuent de
-        fonctionner hors ligne une fois ouvertes.
+        fonctionner hors ligne une fois ouvertes. Ce catalogue aussi
+        s'installe : menu ⋮ de Chrome → « Installer l'application ».
       </p>
     </header>
 
@@ -599,14 +624,100 @@ ${coulisses.map(carteCoulisse).join('\n')}
         Code source sur
         <a href="https://github.com/${COMPTE}">github.com/${COMPTE}</a>.
       </p>
+      <p>
+        Ces applications sont gratuites et open source —
+        <a href="${SPONSOR_URL}" rel="noopener noreferrer"
+          >m'offrir un café</a
+        >
+        aide à les maintenir.
+      </p>
     </footer>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('${FAMILY_ORIGIN}/sw.js').catch(function () {});
+      }
+    </script>
   </body>
 </html>
+`;
+
+// Manifest + service worker : sans eux, Chrome Android n'offre pas
+// « Installer l'application ». Le worker ne fait que du réseau d'abord —
+// le hub reste une page générée, pas une app hors-ligne riche.
+const manifeste = {
+  id: `${FAMILY_ORIGIN}/`,
+  name: `Les applications de ${COMPTE}`,
+  short_name: 'GuiiuG',
+  description,
+  lang: 'fr',
+  dir: 'ltr',
+  start_url: `${FAMILY_ORIGIN}/`,
+  scope: `${FAMILY_ORIGIN}/`,
+  display: 'standalone',
+  background_color: THEME,
+  theme_color: THEME,
+  icons: [
+    {
+      src: `${FAMILY_ORIGIN}/icon-192.png`,
+      sizes: '192x192',
+      type: 'image/png',
+      purpose: 'any',
+    },
+    {
+      src: `${FAMILY_ORIGIN}/icon-512.png`,
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'any',
+    },
+    {
+      src: `${FAMILY_ORIGIN}/icon-512.png`,
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'maskable',
+    },
+  ],
+};
+
+const sw = `/* Hub ${COMPTE} — réseau d'abord, repli cache pour l'accueil. */
+const CACHE = 'hub-v1';
+const PRECACHE = ['${FAMILY_ORIGIN}/', '${FAMILY_ORIGIN}/index.html', '${FAMILY_ORIGIN}/manifest.webmanifest', '${FAMILY_ORIGIN}/icon-192.png', '${FAMILY_ORIGIN}/icon-512.png'];
+
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', event => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  event.respondWith(
+    fetch(req)
+      .then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+        return res;
+      })
+      .catch(() => caches.match(req).then(r => r || caches.match('${FAMILY_ORIGIN}/')))
+  );
+});
 `;
 
 mkdirSync(SORTIE, { recursive: true });
 writeFileSync(join(SORTIE, 'index.html'), html, 'utf8');
 writeFileSync(join(SORTIE, 'robots.txt'), robots, 'utf8');
+writeFileSync(
+  join(SORTIE, 'manifest.webmanifest'),
+  JSON.stringify(manifeste, null, 2) + '\n',
+  'utf8'
+);
+writeFileSync(join(SORTIE, 'sw.js'), sw, 'utf8');
 writeFileSync(join(SORTIE, 'sitemap.xml'), sitemap, 'utf8');
 // Le contenu exact que Google attend, au caractère près.
 writeFileSync(
@@ -638,10 +749,23 @@ copyFileSync(
   new URL('../static/favicon.png', import.meta.url),
   join(SORTIE, 'favicon.png')
 );
+copyFileSync(
+  new URL('../static/icon-192.png', import.meta.url),
+  join(SORTIE, 'icon-192.png')
+);
+copyFileSync(
+  new URL('../static/icon-512.png', import.meta.url),
+  join(SORTIE, 'icon-512.png')
+);
+copyFileSync(
+  new URL('../static/apple-touch-icon.png', import.meta.url),
+  join(SORTIE, 'apple-touch-icon.png')
+);
 
 console.log(
   `\nÉcrit dans ${SORTIE}/ : index.html (${FAMILY_APPS.length} applications en ` +
     `${sections.length} catégories, ${coulisses.length} en coulisses), ` +
     `robots.txt (${sites.filter(s => s.plan).length + 1} plans de site), sitemap.xml, ` +
-    `${VERIFICATION_GOOGLE}, BingSiteAuth.xml, clé IndexNow, og-image.jpg, favicons`
+    `${VERIFICATION_GOOGLE}, BingSiteAuth.xml, clé IndexNow, og-image.jpg, ` +
+    `manifest.webmanifest, sw.js, icônes PWA`
 );
