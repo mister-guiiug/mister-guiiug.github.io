@@ -191,8 +191,45 @@ const { tag_name: version } = await api(
 console.log(`Catalogue du socle ${version}…`);
 
 const catalogue = await moduleDuSocle(version, 'apps-catalog.js');
-const libelles = (await moduleDuSocle(version, 'react/labels-fr.js')).default;
+const libellesFr = (await moduleDuSocle(version, 'react/labels-fr.js')).default;
+const libellesEn = (await moduleDuSocle(version, 'react/labels-en.js')).default;
 const { FAMILY_APPS, CATEGORIES, FAMILY_ORIGIN } = catalogue;
+
+/**
+ * Descriptions EN du catalogue — le socle ne les porte qu'en français
+ * (langue de référence). Le hub les double ici pour le bascule FR/EN.
+ */
+const DESC_EN = {
+  'miss-carbook': 'Collaborative vehicle comparison, in real time.',
+  'miss-contraction': 'Contraction timer and maternity alerts.',
+  'miss-genius': 'School grade average simulator (marks, scenarios, goals).',
+  'miss-uwh': 'Season accounting for an underwater hockey club.',
+  'mister-cim10': 'ICD-10 coding helper in the browser (TXT/CSV/PDF export).',
+  'mister-footcoach':
+    'Football team management: line-ups, stats, training sessions.',
+  'mister-puzzle': 'Collaborative real-time jigsaw progress tracking.',
+  'miss-ticket-pwa': 'PWA remote for the Miss Ticket desktop app.',
+  'mister-doc':
+    'Synced medical on-call roster: monthly view, weekend and hour counters.',
+  'miss-lookhouse':
+    'Property watch: multi-source, de-dupe, price history, explainable scoring.',
+  'miss-badminton': 'Badminton score tracking and statistics.',
+  'miss-dice': 'Six-sided dice roller, fully offline, installable.',
+  'miss-supaboss':
+    'Multi-account Supabase Free control: pause/restore, quotas, demos.',
+  'miss-supatool':
+    'Migrate a Supabase project to another: schema, data and files.',
+  'mister-molkky': 'Score counter for Mölkky games (multi-device).',
+  'mister-qowa':
+    'Live interactive quiz: the host drives, players answer.',
+  'mister-family-map':
+    'Family outing ideas: collaborative map, calendar and field notes.',
+  'mister-miss-koh':
+    'Adventure-season tracker: castaways, episodes, challenges, councils and votes. Unofficial.',
+  'mister-quota': 'AI service usage tracker (desktop app).',
+  'mister-settle':
+    'Split expenses with friends: who paid, who owes what, suggested reimbursements — no payments.',
+};
 
 console.log('Sites publiés…');
 const depots = (
@@ -357,7 +394,7 @@ const jsonLd = JSON.stringify(donneesStructurees).replace(/</g, '\\u003c');
 const maturite = m =>
   m === 'stable'
     ? ''
-    : ` <span class="badge">${echappe(libelles.maturity?.[m] ?? m)}</span>`;
+    : ` <span class="badge" data-i18n-maturity="${echappe(m)}">${echappe(libellesFr.maturity?.[m] ?? m)}</span>`;
 
 /**
  * Les liens vers les apps s'ouvrent hors du shell du hub une fois installé :
@@ -372,6 +409,7 @@ const carteApp = app => {
   const bureau = app.platform === 'desktop';
   const pages = pagesParApp.get(app.id) ?? [];
   const image = imageParApp.get(app.id);
+  const descEn = DESC_EN[app.id] ?? app.description;
   const liste = pages.length
     ? `
             <ul class="pages">
@@ -391,10 +429,13 @@ ${pages.map(p => `              <li>${lienHorsShell(p.url, echappe(p.titre))}</l
               />
             </a>`
     : '';
+  const badgeBureau = bureau
+    ? ` <span class="badge" data-i18n="badgeDesktop">${echappe('Application de bureau')}</span>`
+    : '';
   return `          <li class="carte">${visuel}
             <div class="corps">
-              <h3>${lienHorsShell(app.appUrl, echappe(app.name))}${maturite(app.maturity)}${bureau ? ' <span class="badge">Application de bureau</span>' : ''}</h3>
-              <p>${echappe(app.description)}</p>${liste}
+              <h3>${lienHorsShell(app.appUrl, echappe(app.name))}${maturite(app.maturity)}${badgeBureau}</h3>
+              <p data-fr="${echappe(app.description)}" data-en="${echappe(descEn)}">${echappe(app.description)}</p>${liste}
             </div>
           </li>`;
 };
@@ -403,7 +444,7 @@ const sections = CATEGORIES.map(cat => {
   const apps = FAMILY_APPS.filter(a => a.category === cat);
   if (!apps.length) return null;
   return `      <section aria-labelledby="cat-${cat}">
-        <h2 id="cat-${cat}">${echappe(libelles.categories?.[cat] ?? cat)}</h2>
+        <h2 id="cat-${cat}" data-i18n-cat="${echappe(cat)}">${echappe(libellesFr.categories?.[cat] ?? cat)}</h2>
         <ul>
 ${apps.map(carteApp).join('\n')}
         </ul>
@@ -424,11 +465,64 @@ const description =
     .join(', ') +
   ', et les autres.';
 
+const descriptionEn =
+  `Installable web apps by ${COMPTE}: ` +
+  FAMILY_APPS.slice(0, 6)
+    .map(a => a.name)
+    .join(', ') +
+  ', and more.';
+
 // Bing SEO/GEO : titre ≥ 50 car. Le H1 visible reste le nom de la famille.
 const titrePage = `Les applications de ${COMPTE} - PWA web installables hors magasin`;
+const titrePageEn = `${COMPTE}'s apps - installable PWAs, no app store`;
+
+const i18nJson = JSON.stringify({
+  fr: {
+    title: titrePage,
+    description,
+    h1: `Les applications de ${COMPTE}`,
+    chapeau:
+      "Une famille d'applications web installables. Chacune s'installe depuis le navigateur, sans magasin d'applications, et la plupart continuent de fonctionner hors ligne une fois ouvertes. Ce catalogue aussi s'installe : menu ⋮ de Chrome → « Installer l'application ».",
+    coulisses: 'Dans les coulisses',
+    source: 'Code source sur',
+    sponsorBefore: 'Ces applications sont gratuites et open source —',
+    sponsorLink: "m'offrir un café",
+    sponsorAfter: 'aide à les maintenir.',
+    badgeDesktop: 'Application de bureau',
+    langFr: 'Français',
+    langEn: 'English',
+    themeLight: 'Clair',
+    themeDark: 'Sombre',
+    themeSystem: 'Système',
+    prefs: 'Langue et thème',
+    categories: libellesFr.categories,
+    maturity: libellesFr.maturity,
+  },
+  en: {
+    title: titrePageEn,
+    description: descriptionEn,
+    h1: `Apps by ${COMPTE}`,
+    chapeau:
+      'A family of installable web apps. Each one installs from the browser, with no app store, and most keep working offline once opened. This catalogue installs too: Chrome ⋮ menu → “Install app”.',
+    coulisses: 'Behind the scenes',
+    source: 'Source code on',
+    sponsorBefore: 'These apps are free and open source —',
+    sponsorLink: 'buy me a coffee',
+    sponsorAfter: 'helps keep them going.',
+    badgeDesktop: 'Desktop app',
+    langFr: 'Français',
+    langEn: 'English',
+    themeLight: 'Light',
+    themeDark: 'Dark',
+    themeSystem: 'System',
+    prefs: 'Language and theme',
+    categories: libellesEn.categories,
+    maturity: libellesEn.maturity,
+  },
+}).replace(/</g, '\\u003c');
 
 const html = `<!doctype html>
-<html lang="fr">
+<html lang="fr" data-theme="system">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -437,7 +531,7 @@ const html = `<!doctype html>
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${FAMILY_ORIGIN}/" />
     <link rel="manifest" href="${FAMILY_ORIGIN}/manifest.webmanifest" />
-    <meta name="theme-color" content="${THEME}" />
+    <meta name="theme-color" content="${THEME}" id="theme-color" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="GuiiuG" />
@@ -458,22 +552,44 @@ const html = `<!doctype html>
     <meta name="twitter:title" content="${titrePage}" />
     <meta name="twitter:image" content="${FAMILY_ORIGIN}/og-image.jpg?v=${IMAGE_EMPREINTE}" />
     <script type="application/ld+json">${jsonLd}</script>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('hub-theme') || 'system';
+          var l = localStorage.getItem('hub-lang') || 'fr';
+          document.documentElement.dataset.theme = t;
+          document.documentElement.lang = l === 'en' ? 'en' : 'fr';
+        } catch (e) {}
+      })();
+    </script>
     <style>
-      :root {
-        color-scheme: light dark;
+      :root, html[data-theme='light'] {
+        color-scheme: light;
         --fond: #ffffff;
         --texte: #1a1b26;
         --doux: #55586b;
         --bord: #d9dbe6;
         --lien: #2f4bd1;
+        --barre: #f4f5fa;
+      }
+      html[data-theme='dark'] {
+        color-scheme: dark;
+        --fond: #0f1220;
+        --texte: #e8e9f2;
+        --doux: #a8abc2;
+        --bord: #2a2e45;
+        --lien: #9fb2ff;
+        --barre: #181c2e;
       }
       @media (prefers-color-scheme: dark) {
-        :root {
+        html[data-theme='system'] {
+          color-scheme: dark;
           --fond: #0f1220;
           --texte: #e8e9f2;
           --doux: #a8abc2;
           --bord: #2a2e45;
           --lien: #9fb2ff;
+          --barre: #181c2e;
         }
       }
       * {
@@ -487,6 +603,50 @@ const html = `<!doctype html>
         color: var(--texte);
         font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
         line-height: 1.6;
+      }
+      .prefs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        justify-content: flex-end;
+        margin: 0 0 1.25rem;
+      }
+      .prefs fieldset {
+        display: inline-flex;
+        gap: 0.15rem;
+        margin: 0;
+        padding: 0.2rem;
+        border: 1px solid var(--bord);
+        border-radius: 999px;
+        background: var(--barre);
+      }
+      .prefs legend {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+      }
+      .prefs button {
+        appearance: none;
+        border: 0;
+        border-radius: 999px;
+        padding: 0.35rem 0.7rem;
+        background: transparent;
+        color: var(--doux);
+        font: inherit;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .prefs button[aria-pressed='true'] {
+        background: var(--fond);
+        color: var(--texte);
+        box-shadow: 0 0 0 1px var(--bord);
+      }
+      .prefs button:focus-visible {
+        outline: 3px solid var(--lien);
+        outline-offset: 2px;
       }
       h1 {
         font-size: clamp(1.6rem, 5vw, 2.3rem);
@@ -510,8 +670,6 @@ const html = `<!doctype html>
         padding: 0;
         display: grid;
         gap: 0.9rem;
-        /* min() : sans lui, une piste ne descend jamais sous 17rem et
-           déborde d'un écran plus étroit que 17rem plus les marges. */
         grid-template-columns: repeat(auto-fill, minmax(min(17rem, 100%), 1fr));
       }
       .carte {
@@ -594,9 +752,23 @@ const html = `<!doctype html>
     </style>
   </head>
   <body>
+    <div class="prefs" role="group" data-i18n-aria="prefs" aria-label="Langue et thème">
+      <fieldset>
+        <legend data-i18n="prefs">Langue et thème</legend>
+        <button type="button" data-set-lang="fr" aria-pressed="true" data-i18n="langFr">Français</button>
+        <button type="button" data-set-lang="en" aria-pressed="false" data-i18n="langEn">English</button>
+      </fieldset>
+      <fieldset>
+        <legend data-i18n="prefs">Langue et thème</legend>
+        <button type="button" data-set-theme="light" aria-pressed="false" data-i18n="themeLight">Clair</button>
+        <button type="button" data-set-theme="dark" aria-pressed="false" data-i18n="themeDark">Sombre</button>
+        <button type="button" data-set-theme="system" aria-pressed="true" data-i18n="themeSystem">Système</button>
+      </fieldset>
+    </div>
+
     <header>
-      <h1>Les applications de ${COMPTE}</h1>
-      <p class="chapeau">
+      <h1 data-i18n="h1">Les applications de ${COMPTE}</h1>
+      <p class="chapeau" data-i18n="chapeau">
         Une famille d'applications web installables. Chacune s'installe depuis
         le navigateur, sans magasin d'applications, et la plupart continuent de
         fonctionner hors ligne une fois ouvertes. Ce catalogue aussi
@@ -610,7 +782,7 @@ ${
   coulisses.length
     ? `
       <section class="coulisses" aria-labelledby="coulisses">
-        <h2 id="coulisses">Dans les coulisses</h2>
+        <h2 id="coulisses" data-i18n="coulisses">Dans les coulisses</h2>
         <ul>
 ${coulisses.map(carteCoulisse).join('\n')}
         </ul>
@@ -621,21 +793,101 @@ ${coulisses.map(carteCoulisse).join('\n')}
 
     <footer>
       <p>
-        Code source sur
+        <span data-i18n="source">Code source sur</span>
         <a href="https://github.com/${COMPTE}">github.com/${COMPTE}</a>.
       </p>
       <p>
-        Ces applications sont gratuites et open source —
-        <a href="${SPONSOR_URL}" rel="noopener noreferrer"
+        <span data-i18n="sponsorBefore">Ces applications sont gratuites et open source —</span>
+        <a href="${SPONSOR_URL}" rel="noopener noreferrer" data-i18n="sponsorLink"
           >m'offrir un café</a
         >
-        aide à les maintenir.
+        <span data-i18n="sponsorAfter">aide à les maintenir.</span>
       </p>
     </footer>
     <script>
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('${FAMILY_ORIGIN}/sw.js').catch(function () {});
-      }
+      (function () {
+        var I18N = ${i18nJson};
+        var root = document.documentElement;
+        var themeMeta = document.getElementById('theme-color');
+
+        function lang() {
+          return root.lang === 'en' ? 'en' : 'fr';
+        }
+
+        function theme() {
+          return root.dataset.theme || 'system';
+        }
+
+        function applyLang(l) {
+          l = l === 'en' ? 'en' : 'fr';
+          root.lang = l;
+          try { localStorage.setItem('hub-lang', l); } catch (e) {}
+          var t = I18N[l];
+          document.title = t.title;
+          var desc = document.querySelector('meta[name="description"]');
+          if (desc) desc.setAttribute('content', t.description);
+          document.querySelectorAll('[data-i18n]').forEach(function (el) {
+            var k = el.getAttribute('data-i18n');
+            if (t[k]) el.textContent = t[k];
+          });
+          document.querySelectorAll('[data-i18n-aria]').forEach(function (el) {
+            var k = el.getAttribute('data-i18n-aria');
+            if (t[k]) el.setAttribute('aria-label', t[k]);
+          });
+          document.querySelectorAll('[data-i18n-cat]').forEach(function (el) {
+            var c = el.getAttribute('data-i18n-cat');
+            if (t.categories && t.categories[c]) el.textContent = t.categories[c];
+          });
+          document.querySelectorAll('[data-i18n-maturity]').forEach(function (el) {
+            var m = el.getAttribute('data-i18n-maturity');
+            if (t.maturity && t.maturity[m]) el.textContent = t.maturity[m];
+          });
+          document.querySelectorAll('[data-fr][data-en]').forEach(function (el) {
+            el.textContent = el.getAttribute(l === 'en' ? 'data-en' : 'data-fr');
+          });
+          document.querySelectorAll('[data-set-lang]').forEach(function (btn) {
+            btn.setAttribute('aria-pressed', btn.getAttribute('data-set-lang') === l ? 'true' : 'false');
+          });
+        }
+
+        function resolveThemeColor() {
+          var th = theme();
+          if (th === 'dark') return '#0f1220';
+          if (th === 'light') return '#ffffff';
+          return window.matchMedia('(prefers-color-scheme: dark)').matches ? '#0f1220' : '#ffffff';
+        }
+
+        function applyTheme(th) {
+          if (th !== 'light' && th !== 'dark' && th !== 'system') th = 'system';
+          root.dataset.theme = th;
+          try { localStorage.setItem('hub-theme', th); } catch (e) {}
+          if (themeMeta) themeMeta.setAttribute('content', resolveThemeColor());
+          document.querySelectorAll('[data-set-theme]').forEach(function (btn) {
+            btn.setAttribute('aria-pressed', btn.getAttribute('data-set-theme') === th ? 'true' : 'false');
+          });
+        }
+
+        document.querySelectorAll('[data-set-lang]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            applyLang(btn.getAttribute('data-set-lang'));
+          });
+        });
+        document.querySelectorAll('[data-set-theme]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            applyTheme(btn.getAttribute('data-set-theme'));
+          });
+        });
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+          if (theme() === 'system') applyTheme('system');
+        });
+
+        applyLang(lang());
+        applyTheme(theme());
+
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('${FAMILY_ORIGIN}/sw.js').catch(function () {});
+        }
+      })();
     </script>
   </body>
 </html>

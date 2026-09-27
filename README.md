@@ -59,6 +59,10 @@ Le hub est lui-même **installable** (manifest + service worker + icônes
 vers les apps s'ouvrent hors du shell du catalogue, pour que chaque PWA reste
 installable séparément (même origine `github.io`).
 
+La page propose un bascule **FR / EN** (catégories et maturités du socle,
+descriptions EN locales au hub) et un thème **clair / sombre / système**,
+mémorisés dans `localStorage`.
+
 ## Publication
 
 **Rien n'est commité.** Le workflow [`pages.yml`](.github/workflows/pages.yml)
