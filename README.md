@@ -49,7 +49,9 @@ L'API GitHub ne sert plus qu'à ce que le catalogue ignore :
 Chaque carte d'application liste aussi ses **pages de contenu** (socle 6.17.0 :
 `content/pages/<slug>.md` → `<slug>.html`), lues dans le plan de site de l'app
 avec leur titre. C'est le lien qui les relie à la seule page du parc déjà
-indexée. L'**image de partage** de la racine est la seule image versionnée :
+indexée. Elle affiche aussi l'**image de partage** de l'app (`og-image.jpg`,
+1200×630), sondée à la construction : absente → carte sans image, jamais un
+lien mort. L'image de partage de la racine reste versionnée ici :
 `static/og-image.jpg`, la mosaïque des icônes du catalogue.
 
 ## Publication
