@@ -638,6 +638,28 @@ const html = `<!doctype html>
         font-size: 0.82rem;
         font-weight: 600;
         cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+      .prefs button .ico {
+        display: inline-flex;
+        width: 1.05rem;
+        height: 1.05rem;
+        flex-shrink: 0;
+      }
+      .prefs button .ico svg {
+        width: 100%;
+        height: 100%;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.75;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .prefs button .drapeau {
+        font-size: 1rem;
+        line-height: 1;
       }
       .prefs button[aria-pressed='true'] {
         background: var(--fond);
@@ -755,14 +777,35 @@ const html = `<!doctype html>
     <div class="prefs" role="group" data-i18n-aria="prefs" aria-label="Langue et thème">
       <fieldset>
         <legend data-i18n="prefs">Langue et thème</legend>
-        <button type="button" data-set-lang="fr" aria-pressed="true" data-i18n="langFr">Français</button>
-        <button type="button" data-set-lang="en" aria-pressed="false" data-i18n="langEn">English</button>
+        <button type="button" data-set-lang="fr" aria-pressed="true">
+          <span class="drapeau" aria-hidden="true">🇫🇷</span>
+          <span data-i18n="langFr">Français</span>
+        </button>
+        <button type="button" data-set-lang="en" aria-pressed="false">
+          <span class="drapeau" aria-hidden="true">🇬🇧</span>
+          <span data-i18n="langEn">English</span>
+        </button>
       </fieldset>
       <fieldset>
         <legend data-i18n="prefs">Langue et thème</legend>
-        <button type="button" data-set-theme="light" aria-pressed="false" data-i18n="themeLight">Clair</button>
-        <button type="button" data-set-theme="dark" aria-pressed="false" data-i18n="themeDark">Sombre</button>
-        <button type="button" data-set-theme="system" aria-pressed="true" data-i18n="themeSystem">Système</button>
+        <button type="button" data-set-theme="light" aria-pressed="false">
+          <span class="ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          </span>
+          <span data-i18n="themeLight">Clair</span>
+        </button>
+        <button type="button" data-set-theme="dark" aria-pressed="false">
+          <span class="ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/></svg>
+          </span>
+          <span data-i18n="themeDark">Sombre</span>
+        </button>
+        <button type="button" data-set-theme="system" aria-pressed="true">
+          <span class="ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+          </span>
+          <span data-i18n="themeSystem">Système</span>
+        </button>
       </fieldset>
     </div>
 
