@@ -633,6 +633,10 @@ const i18nJson = JSON.stringify({
     prefs: 'Langue et thème',
     filtre: 'Rechercher une application',
     filtrePh: 'Rechercher…',
+    sites: 'Pages du parc',
+    siteCatalogue: 'Catalogue',
+    siteShowroom: 'Showroom',
+    siteParc: 'Parc',
     filtreVide: 'Aucune application ne correspond.',
     filtreEffacer: 'Effacer le filtre',
     filtreSuggestions: 'Essayer une catégorie',
@@ -690,6 +694,10 @@ const i18nJson = JSON.stringify({
     prefs: 'Language and theme',
     filtre: 'Search apps',
     filtrePh: 'Search…',
+    sites: 'Family pages',
+    siteCatalogue: 'Catalogue',
+    siteShowroom: 'Showroom',
+    siteParc: 'Estate',
     filtreVide: 'No apps match.',
     filtreEffacer: 'Clear filter',
     filtreSuggestions: 'Try a category',
@@ -1160,6 +1168,30 @@ const html = `<!doctype html>
       }
       .filtre:focus-within .filtre-kbd {
         opacity: 0;
+      }
+      .sites {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin: 0 0 0.65rem;
+      }
+      .sites a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 2rem;
+        padding: 0.1rem 0.7rem;
+        border: 1px solid var(--bord);
+        border-radius: 999px;
+        background: var(--fond-carte);
+        color: var(--texte);
+        font-size: 0.82rem;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .sites a[aria-current='page'] {
+        border-color: var(--lien);
+        background: color-mix(in srgb, var(--lien) 14%, var(--fond-carte));
+        color: var(--lien);
       }
       .compte {
         margin: 0;
@@ -1893,6 +1925,13 @@ const html = `<!doctype html>
           </fieldset>
         </div>
       </div>
+
+      <nav class="sites" aria-labelledby="sites-label">
+        <span id="sites-label" class="sr-only" data-i18n="sites">Pages du parc</span>
+        <a href="${FAMILY_ORIGIN}/" aria-current="page" data-i18n="siteCatalogue">Catalogue</a>
+        <a href="${FAMILY_ORIGIN}/dev-pwa-config/" data-i18n="siteShowroom">Showroom</a>
+        <a href="${FAMILY_ORIGIN}/parc-dashboard/" data-i18n="siteParc">Parc</a>
+      </nav>
 
       <label class="filtre">
           <span class="sr-only" data-i18n="filtre">Rechercher une application</span>
