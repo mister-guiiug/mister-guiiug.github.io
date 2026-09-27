@@ -1,2 +1,8 @@
 # Engendré au moment de publier par scripts/build-site.mjs — jamais commité.
 _site/
+_site-*/
+
+# Install éphémère de sharp en CI / en local pour les miniatures.
+node_modules/
+package-lock.json
+package.json

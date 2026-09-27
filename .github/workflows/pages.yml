@@ -52,6 +52,11 @@ jobs:
         with:
           node-version-file: .nvmrc
 
+      # Miniatures 640w des cartes : pas de package.json sur ce dépôt, install
+      # éphémère. Sans sharp, le build recopie quand même les og-image.
+      - name: Installer sharp (miniatures hub)
+        run: npm install --no-save sharp@0.34.4
+
       - name: Engendrer index.html, robots.txt, sitemap.xml et la vérification Search Console
         run: node scripts/build-site.mjs _site
         env:

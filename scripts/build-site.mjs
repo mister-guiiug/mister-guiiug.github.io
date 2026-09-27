@@ -247,9 +247,9 @@ const enPanne = [];
 /** id de l'app → ses pages de contenu. */
 const pagesParApp = new Map();
 /**
- * id de l'app → URL de son image de partage (1200×630), si elle répond.
- * Même fichier que `og:image` de l'app : on le sonde, on ne le recopie pas —
- * une seule source, celle que chaque application publie déjà.
+ * id de l'app → URL distante de son og-image (1200×630), si elle répond.
+ * À la publication on en écrit une miniature 640w dans `previews/<id>.jpg`
+ * (sharp si dispo, sinon copie brute) : même source, poids mobile réduit.
  */
 const imageParApp = new Map();
 for (const app of FAMILY_APPS) {
@@ -408,12 +408,16 @@ const lienHorsShell = (url, texte, attrs = '') =>
 const carteApp = app => {
   const bureau = app.platform === 'desktop';
   const pages = pagesParApp.get(app.id) ?? [];
-  const image = imageParApp.get(app.id);
+  const aImage = imageParApp.has(app.id);
   const descEn = DESC_EN[app.id] ?? app.description;
   const premierePage = pages[0];
   const guide = premierePage
     ? `
-            <p class="guide">${lienHorsShell(premierePage.url, '<span data-i18n="guide">Guide</span>', ' class="guide-lien"')}</p>`
+            <p class="guide">${lienHorsShell(
+              premierePage.url,
+              '<span data-i18n="guide">Guide</span>',
+              ` class="guide-lien" title="${echappe(premierePage.titre)}"`
+            )}</p>`
     : '';
   const recherche = [
     app.name,
@@ -421,17 +425,18 @@ const carteApp = app => {
     descEn,
     libellesFr.categories?.[app.category] ?? '',
     libellesEn.categories?.[app.category] ?? '',
+    app.maturity,
   ]
     .join(' ')
     .toLowerCase();
-  const visuel = image
+  const visuel = aImage
     ? `
             <span class="visuel">
               <img
-                src="${echappe(image)}"
+                src="${FAMILY_ORIGIN}/previews/${echappe(app.id)}.jpg"
                 alt=""
-                width="1200"
-                height="630"
+                width="640"
+                height="336"
                 sizes="(max-width: 40rem) 100vw, 320px"
                 loading="lazy"
                 decoding="async"
@@ -441,7 +446,8 @@ const carteApp = app => {
   const badgeBureau = bureau
     ? ` <span class="badge" data-i18n="badgeDesktop">${echappe('Application de bureau')}</span>`
     : '';
-  return `          <li class="carte" data-search="${echappe(recherche)}">
+  const classes = bureau ? 'carte carte-bureau' : 'carte';
+  return `          <li class="${classes}" data-search="${echappe(recherche)}" data-maturity="${echappe(app.maturity)}">
             ${lienHorsShell(app.appUrl, '', ` class="carte-hit" aria-label="${echappe(app.name)}"`)}
 ${visuel}
             <div class="corps">
@@ -458,20 +464,51 @@ const catsAvecApps = CATEGORIES.filter(cat =>
 const navCats = catsAvecApps
   .map(
     cat =>
-      `          <a href="#cat-${cat}" data-i18n-cat="${echappe(cat)}">${echappe(libellesFr.categories?.[cat] ?? cat)}</a>`
+      `          <a href="#cat-${cat}" data-cat="${echappe(cat)}" data-i18n-cat="${echappe(cat)}">${echappe(libellesFr.categories?.[cat] ?? cat)}</a>`
   )
   .join('\n');
 
 const sections = CATEGORIES.map(cat => {
   const apps = FAMILY_APPS.filter(a => a.category === cat);
   if (!apps.length) return null;
-  return `      <section aria-labelledby="cat-${cat}">
+  return `      <section data-cat-section="${echappe(cat)}" aria-labelledby="cat-${cat}">
         <h2 id="cat-${cat}" data-i18n-cat="${echappe(cat)}">${echappe(libellesFr.categories?.[cat] ?? cat)}</h2>
         <ul>
 ${apps.map(carteApp).join('\n')}
         </ul>
       </section>`;
 }).filter(Boolean);
+
+/** Coup de projecteur : première app stable avec image — pas un choix éditorial figé. */
+const featuredApp = FAMILY_APPS.find(
+  a => a.maturity === 'stable' && imageParApp.has(a.id)
+);
+const featuredDescEn = featuredApp
+  ? (DESC_EN[featuredApp.id] ?? featuredApp.description)
+  : '';
+const featuredHtml = featuredApp
+  ? `
+    <aside class="projecteur" aria-labelledby="projecteur-titre">
+      <p class="projecteur-label" id="projecteur-titre" data-i18n="projecteur">Coup de projecteur</p>
+      <div class="projecteur-carte">
+        ${lienHorsShell(featuredApp.appUrl, '', ` class="carte-hit" aria-label="${echappe(featuredApp.name)}"`)}
+        <span class="visuel">
+          <img
+            src="${FAMILY_ORIGIN}/previews/${echappe(featuredApp.id)}.jpg"
+            alt=""
+            width="640"
+            height="336"
+            sizes="(max-width: 40rem) 100vw, 480px"
+            decoding="async"
+          />
+        </span>
+        <div class="corps">
+          <h2 class="projecteur-nom">${echappe(featuredApp.name)}</h2>
+          <p data-fr="${echappe(featuredApp.description)}" data-en="${echappe(featuredDescEn)}">${echappe(featuredApp.description)}</p>
+        </div>
+      </div>
+    </aside>`
+  : '';
 
 const carteCoulisse = s => `          <li class="carte">
             ${lienHorsShell(`/${s.nom}/`, '', ` class="carte-hit" aria-label="${echappe(s.titre)}"`)}
@@ -495,15 +532,30 @@ const descriptionEn =
     .join(', ') +
   ', and more.';
 
-// Bing SEO/GEO : titre ≥ 50 car. Le H1 visible reste le nom de la famille.
+// Bing SEO/GEO : titre ≥ 50 car. Le H1 visible est la marque ; le <title> reste descriptif.
 const titrePage = `Les applications de ${COMPTE} - PWA web installables hors magasin`;
 const titrePageEn = `${COMPTE}'s apps - installable PWAs, no app store`;
+
+const dateAfficheFr = new Intl.DateTimeFormat('fr-FR', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+}).format(new Date());
+const dateAfficheEn = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+}).format(new Date());
+
+const nbApps = FAMILY_APPS.length;
+const nbCats = catsAvecApps.length;
 
 const i18nJson = JSON.stringify({
   fr: {
     title: titrePage,
     description,
-    h1: `Les applications de ${COMPTE}`,
+    marque: 'GuiiuG',
+    sousTitre: `Les applications de ${COMPTE}`,
     chapeau:
       "Une famille d'applications web installables. Chacune s'installe depuis le navigateur, sans magasin d'applications, et la plupart continuent de fonctionner hors ligne une fois ouvertes. Ce catalogue aussi s'installe : menu ⋮ de Chrome → « Installer l'application ».",
     chapeauPwa:
@@ -523,15 +575,26 @@ const i18nJson = JSON.stringify({
     prefs: 'Langue et thème',
     filtre: 'Filtrer les applications',
     filtrePh: 'Filtrer les applications…',
+    filtreVide: 'Aucune application ne correspond.',
+    filtreEffacer: 'Effacer le filtre',
     nav: 'Catégories',
     guide: 'Guide',
+    skip: 'Aller aux applications',
+    installer: 'Installer le catalogue',
+    projecteur: 'Coup de projecteur',
+    maturiteTous: 'Toutes',
+    maturiteFiltre: 'Maturité',
+    compte: `${nbApps} applications · ${nbCats} catégories`,
+    compteFiltre: '{n} sur ' + nbApps,
+    maj: `Mis à jour le ${dateAfficheFr}`,
     categories: libellesFr.categories,
     maturity: libellesFr.maturity,
   },
   en: {
     title: titrePageEn,
     description: descriptionEn,
-    h1: `Apps by ${COMPTE}`,
+    marque: 'GuiiuG',
+    sousTitre: `Apps by ${COMPTE}`,
     chapeau:
       'A family of installable web apps. Each one installs from the browser, with no app store, and most keep working offline once opened. This catalogue installs too: Chrome ⋮ menu → “Install app”.',
     chapeauPwa:
@@ -551,8 +614,18 @@ const i18nJson = JSON.stringify({
     prefs: 'Language and theme',
     filtre: 'Filter apps',
     filtrePh: 'Filter apps…',
+    filtreVide: 'No apps match.',
+    filtreEffacer: 'Clear filter',
     nav: 'Categories',
     guide: 'Guide (FR)',
+    skip: 'Skip to apps',
+    installer: 'Install this catalogue',
+    projecteur: 'Spotlight',
+    maturiteTous: 'All',
+    maturiteFiltre: 'Maturity',
+    compte: `${nbApps} apps · ${nbCats} categories`,
+    compteFiltre: '{n} of ' + nbApps,
+    maj: `Updated ${dateAfficheEn}`,
     categories: libellesEn.categories,
     maturity: libellesEn.maturity,
   },
@@ -605,22 +678,25 @@ const html = `<!doctype html>
     <style>
       :root, html[data-theme='light'] {
         color-scheme: light;
-        --fond: #ffffff;
+        --fond: #f7f8fc;
+        --fond-carte: #ffffff;
         --texte: #1a1b26;
         --doux: #55586b;
         --bord: #d9dbe6;
         --lien: #2f4bd1;
-        --barre: #f4f5fa;
+        --barre: #eef0f7;
         --alpha-fg: #8a4b08;
         --alpha-bg: #fff4e5;
         --alpha-bd: #e0b070;
         --beta-fg: #0a5c4a;
         --beta-bg: #e8f7f2;
         --beta-bd: #7bc4b0;
+        --chrome: #f7f8fc;
       }
       html[data-theme='dark'] {
         color-scheme: dark;
         --fond: #0f1220;
+        --fond-carte: #15192b;
         --texte: #e8e9f2;
         --doux: #a8abc2;
         --bord: #2a2e45;
@@ -632,11 +708,13 @@ const html = `<!doctype html>
         --beta-fg: #a8e8d4;
         --beta-bg: #12352c;
         --beta-bd: #3d7a68;
+        --chrome: #0f1220;
       }
       @media (prefers-color-scheme: dark) {
         html[data-theme='system'] {
           color-scheme: dark;
           --fond: #0f1220;
+          --fond-carte: #15192b;
           --texte: #e8e9f2;
           --doux: #a8abc2;
           --bord: #2a2e45;
@@ -648,6 +726,7 @@ const html = `<!doctype html>
           --beta-fg: #a8e8d4;
           --beta-bg: #12352c;
           --beta-bd: #3d7a68;
+          --chrome: #0f1220;
         }
       }
       * {
@@ -657,13 +736,18 @@ const html = `<!doctype html>
         margin: 0 auto;
         max-width: 60rem;
         padding:
-          max(1.5rem, env(safe-area-inset-top, 0px))
+          max(1.25rem, env(safe-area-inset-top, 0px))
           max(1.25rem, env(safe-area-inset-right, 0px))
           max(4rem, env(safe-area-inset-bottom, 0px))
           max(1.25rem, env(safe-area-inset-left, 0px));
-        background: var(--fond);
+        background:
+          radial-gradient(ellipse 90% 55% at 50% -15%, color-mix(in srgb, var(--lien) 16%, transparent), transparent 70%),
+          radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--texte) 4%, transparent) 0 1px, transparent 1.5px),
+          radial-gradient(circle at 78% 32%, color-mix(in srgb, var(--texte) 3.5%, transparent) 0 1px, transparent 1.5px),
+          var(--fond);
+        background-size: auto, 3.2rem 3.2rem, 4.1rem 4.1rem, auto;
         color: var(--texte);
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
         line-height: 1.6;
       }
       .sr-only {
@@ -677,17 +761,41 @@ const html = `<!doctype html>
         white-space: nowrap;
         border: 0;
       }
-      .topbar {
+      .skip {
+        position: absolute;
+        left: 1rem;
+        top: 1rem;
+        z-index: 40;
+        padding: 0.5rem 0.85rem;
+        border-radius: 0.5rem;
+        background: var(--lien);
+        color: #fff;
+        text-decoration: none;
+        transform: translateY(-200%);
+      }
+      .skip:focus {
+        transform: translateY(0);
+      }
+      .chrome {
         position: sticky;
         top: 0;
         z-index: 20;
+        margin: 0 0 1.25rem;
+        padding: 0.4rem 0 0.75rem;
+        background: var(--chrome);
+        border-bottom: 1px solid color-mix(in srgb, var(--bord) 70%, transparent);
+      }
+      @supports ((-webkit-backdrop-filter: blur(10px)) or (backdrop-filter: blur(10px))) {
+        .chrome {
+          background: color-mix(in srgb, var(--chrome) 88%, transparent);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+        }
+      }
+      .topbar {
         display: flex;
         justify-content: flex-end;
-        margin: 0 0 1.25rem;
-        padding: 0.45rem 0;
-        background: color-mix(in srgb, var(--fond) 86%, transparent);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
+        margin: 0 0 0.65rem;
       }
       .prefs {
         display: flex;
@@ -746,11 +854,14 @@ const html = `<!doctype html>
         line-height: 1;
       }
       .prefs button[aria-pressed='true'] {
-        background: var(--fond);
+        background: var(--fond-carte);
         color: var(--texte);
         box-shadow: 0 0 0 1px var(--bord);
       }
-      .prefs button:focus-visible {
+      .prefs button:focus-visible,
+      .chip:focus-visible,
+      .installer:focus-visible,
+      .vide-effacer:focus-visible {
         outline: 3px solid var(--lien);
         outline-offset: 2px;
       }
@@ -758,7 +869,7 @@ const html = `<!doctype html>
         display: flex;
         gap: 1rem;
         align-items: flex-start;
-        margin: 0 0 1.5rem;
+        margin: 0 0 1.35rem;
       }
       .hero-icone {
         width: 4.5rem;
@@ -770,13 +881,19 @@ const html = `<!doctype html>
       .hero-texte {
         min-width: 0;
       }
-      h1 {
-        font-family: Georgia, 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
-        font-size: clamp(1.7rem, 5vw, 2.45rem);
+      .marque {
+        font-family: "Trebuchet MS", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+        font-size: clamp(2rem, 6vw, 2.75rem);
         font-weight: 700;
-        letter-spacing: -0.02em;
-        line-height: 1.15;
+        letter-spacing: -0.03em;
+        line-height: 1.05;
+        margin: 0 0 0.25rem;
+      }
+      .sous-titre {
         margin: 0 0 0.55rem;
+        color: var(--doux);
+        font-size: 1.05rem;
+        font-weight: 500;
       }
       .chapeau {
         color: var(--doux);
@@ -784,25 +901,38 @@ const html = `<!doctype html>
         margin: 0 0 0.65rem;
       }
       .confiance {
-        margin: 0;
+        margin: 0 0 0.75rem;
         max-width: 42rem;
         color: var(--texte);
         font-size: 0.92rem;
         font-weight: 500;
       }
-      .outils {
-        margin: 0 0 1.75rem;
+      .installer {
+        display: none;
+        appearance: none;
+        margin: 0 0 0.25rem;
+        padding: 0.5rem 0.95rem;
+        border: 1px solid color-mix(in srgb, var(--lien) 40%, var(--bord));
+        border-radius: 999px;
+        background: var(--barre);
+        color: var(--lien);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
       }
-      .filtre {
-        display: block;
-        margin: 0 0 0.75rem;
+      .installer[data-visible='1'] {
+        display: inline-flex;
+      }
+      .outils {
+        display: grid;
+        gap: 0.65rem;
       }
       .filtre input {
         width: 100%;
         padding: 0.7rem 0.9rem;
         border: 1px solid var(--bord);
         border-radius: 0.75rem;
-        background: var(--barre);
+        background: var(--fond-carte);
         color: var(--texte);
         font: inherit;
       }
@@ -810,14 +940,46 @@ const html = `<!doctype html>
         outline: 3px solid var(--lien);
         outline-offset: 2px;
       }
-      .sommaire {
+      .compte {
+        margin: 0;
+        color: var(--doux);
+        font-size: 0.85rem;
+      }
+      .maturite {
         display: flex;
         flex-wrap: wrap;
+        gap: 0.35rem;
+        align-items: center;
+      }
+      .chip {
+        appearance: none;
+        border: 1px solid var(--bord);
+        border-radius: 999px;
+        padding: 0.3rem 0.75rem;
+        background: var(--barre);
+        color: var(--texte);
+        font: inherit;
+        font-size: 0.85rem;
+        cursor: pointer;
+      }
+      .chip[aria-pressed='true'] {
+        border-color: var(--lien);
+        color: var(--lien);
+        background: color-mix(in srgb, var(--lien) 10%, var(--barre));
+      }
+      .sommaire {
+        display: flex;
+        flex-wrap: nowrap;
         gap: 0.4rem;
+        overflow-x: auto;
+        padding-bottom: 0.15rem;
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
       }
       .sommaire a {
         display: inline-flex;
         align-items: center;
+        flex: 0 0 auto;
         padding: 0.35rem 0.8rem;
         border: 1px solid var(--bord);
         border-radius: 999px;
@@ -826,9 +988,51 @@ const html = `<!doctype html>
         text-decoration: none;
         font-size: 0.85rem;
       }
-      .sommaire a:hover {
+      .sommaire a:hover,
+      .sommaire a[aria-current='true'] {
         border-color: var(--lien);
         color: var(--lien);
+      }
+      .sommaire a[aria-current='true'] {
+        background: color-mix(in srgb, var(--lien) 10%, var(--barre));
+      }
+      .projecteur {
+        margin: 0 0 1.75rem;
+      }
+      .projecteur-label {
+        margin: 0 0 0.55rem;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--doux);
+      }
+      .projecteur-carte {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+        gap: 0;
+        border: 1px solid var(--bord);
+        border-radius: 1rem;
+        overflow: hidden;
+        background: var(--fond-carte);
+      }
+      .projecteur-carte .visuel {
+        aspect-ratio: auto;
+        min-height: 100%;
+      }
+      .projecteur-carte .corps {
+        padding: 1.25rem 1.35rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .projecteur-nom {
+        margin: 0 0 0.4rem;
+        font-family: "Trebuchet MS", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+        font-size: 1.35rem;
+        text-transform: none;
+        letter-spacing: -0.02em;
+        color: var(--texte);
       }
       h2 {
         font-size: 1.05rem;
@@ -836,7 +1040,7 @@ const html = `<!doctype html>
         letter-spacing: 0.05em;
         color: var(--doux);
         margin: 2.25rem 0 0.9rem;
-        scroll-margin-top: 4.5rem;
+        scroll-margin-top: 9rem;
       }
       ul {
         list-style: none;
@@ -853,14 +1057,40 @@ const html = `<!doctype html>
         overflow: hidden;
         display: flex;
         flex-direction: column;
-        background: var(--fond);
+        background: var(--fond-carte);
         transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
       }
+      .carte-bureau {
+        border-style: dashed;
+        background:
+          repeating-linear-gradient(
+            -45deg,
+            transparent,
+            transparent 8px,
+            color-mix(in srgb, var(--bord) 35%, transparent) 8px,
+            color-mix(in srgb, var(--bord) 35%, transparent) 9px
+          ),
+          var(--fond-carte);
+      }
       .carte:hover,
-      .carte:focus-within {
+      .carte:focus-within,
+      .projecteur-carte:hover,
+      .projecteur-carte:focus-within {
         border-color: color-mix(in srgb, var(--lien) 55%, var(--bord));
         transform: translateY(-2px);
         box-shadow: 0 8px 22px color-mix(in srgb, var(--texte) 10%, transparent);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .carte,
+        .projecteur-carte {
+          transition: none;
+        }
+        .carte:hover,
+        .carte:focus-within,
+        .projecteur-carte:hover,
+        .projecteur-carte:focus-within {
+          transform: none;
+        }
       }
       .carte-hit {
         position: absolute;
@@ -874,12 +1104,14 @@ const html = `<!doctype html>
         outline: 3px solid var(--lien);
         outline-offset: -3px;
       }
-      .carte .visuel {
+      .carte .visuel,
+      .projecteur-carte .visuel {
         display: block;
         aspect-ratio: 1200 / 630;
         background: var(--bord);
       }
-      .carte .visuel img {
+      .carte .visuel img,
+      .projecteur-carte .visuel img {
         display: block;
         width: 100%;
         height: 100%;
@@ -896,7 +1128,8 @@ const html = `<!doctype html>
       .carte .nom {
         color: var(--texte);
       }
-      .carte p {
+      .carte p,
+      .projecteur-carte p {
         margin: 0;
         color: var(--doux);
         font-size: 0.92rem;
@@ -908,6 +1141,31 @@ const html = `<!doctype html>
       .guide-lien {
         position: relative;
         z-index: 2;
+      }
+      .vide {
+        display: none;
+        margin: 1.5rem 0;
+        padding: 1.25rem;
+        border: 1px dashed var(--bord);
+        border-radius: 1rem;
+        text-align: center;
+        color: var(--doux);
+      }
+      .vide[data-visible='1'] {
+        display: block;
+      }
+      .vide p {
+        margin: 0 0 0.75rem;
+      }
+      .vide-effacer {
+        appearance: none;
+        border: 1px solid var(--bord);
+        border-radius: 999px;
+        padding: 0.4rem 0.85rem;
+        background: var(--barre);
+        color: var(--lien);
+        font: inherit;
+        cursor: pointer;
       }
       .badge {
         display: inline-block;
@@ -992,53 +1250,82 @@ const html = `<!doctype html>
         stroke-linecap: round;
         stroke-linejoin: round;
       }
-      @media (max-width: 36rem) {
+      @media (max-width: 40rem) {
         .hero {
           flex-direction: column;
           align-items: center;
           text-align: center;
         }
         .chapeau,
-        .confiance {
+        .confiance,
+        .sous-titre {
           margin-left: auto;
           margin-right: auto;
         }
-        .sommaire {
-          justify-content: center;
+        .projecteur-carte {
+          grid-template-columns: 1fr;
         }
       }
     </style>
   </head>
   <body>
-    <div class="topbar">
-      <div class="prefs" role="group" data-i18n-aria="prefs" aria-label="Langue et thème">
-        <fieldset>
-          <legend data-i18n="prefs">Langue et thème</legend>
-          <button type="button" data-set-lang="fr" data-i18n-aria="langFr" aria-label="Français" aria-pressed="true" title="Français">
-            <span class="drapeau" aria-hidden="true">🇫🇷</span>
-          </button>
-          <button type="button" data-set-lang="en" data-i18n-aria="langEn" aria-label="English" aria-pressed="false" title="English">
-            <span class="drapeau" aria-hidden="true">🇬🇧</span>
-          </button>
-        </fieldset>
-        <fieldset>
-          <legend data-i18n="prefs">Langue et thème</legend>
-          <button type="button" data-set-theme="light" data-i18n-aria="themeLight" aria-label="Clair" aria-pressed="false" title="Clair">
-            <span class="ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-            </span>
-          </button>
-          <button type="button" data-set-theme="dark" data-i18n-aria="themeDark" aria-label="Sombre" aria-pressed="false" title="Sombre">
-            <span class="ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/></svg>
-            </span>
-          </button>
-          <button type="button" data-set-theme="system" data-i18n-aria="themeSystem" aria-label="Système" aria-pressed="true" title="Système">
-            <span class="ico" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
-            </span>
-          </button>
-        </fieldset>
+    <a class="skip" href="#catalogue" data-i18n="skip">Aller aux applications</a>
+
+    <div class="chrome">
+      <div class="topbar">
+        <div class="prefs" role="group" data-i18n-aria="prefs" aria-label="Langue et thème">
+          <fieldset>
+            <legend data-i18n="prefs">Langue et thème</legend>
+            <button type="button" data-set-lang="fr" data-i18n-aria="langFr" aria-label="Français" aria-pressed="true" title="Français">
+              <span class="drapeau" aria-hidden="true">🇫🇷</span>
+            </button>
+            <button type="button" data-set-lang="en" data-i18n-aria="langEn" aria-label="English" aria-pressed="false" title="English">
+              <span class="drapeau" aria-hidden="true">🇬🇧</span>
+            </button>
+          </fieldset>
+          <fieldset>
+            <legend data-i18n="prefs">Langue et thème</legend>
+            <button type="button" data-set-theme="light" data-i18n-aria="themeLight" aria-label="Clair" aria-pressed="false" title="Clair">
+              <span class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+              </span>
+            </button>
+            <button type="button" data-set-theme="dark" data-i18n-aria="themeDark" aria-label="Sombre" aria-pressed="false" title="Sombre">
+              <span class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/></svg>
+              </span>
+            </button>
+            <button type="button" data-set-theme="system" data-i18n-aria="themeSystem" aria-label="Système" aria-pressed="true" title="Système">
+              <span class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+              </span>
+            </button>
+          </fieldset>
+        </div>
+      </div>
+
+      <div class="outils">
+        <label class="filtre">
+          <span class="sr-only" data-i18n="filtre">Filtrer les applications</span>
+          <input
+            type="search"
+            id="filtre"
+            data-i18n-placeholder="filtrePh"
+            placeholder="Filtrer les applications…"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </label>
+        <div class="maturite" role="group" data-i18n-aria="maturiteFiltre" aria-label="Maturité">
+          <button type="button" class="chip" data-maturity-filter="" aria-pressed="true" data-i18n="maturiteTous">Toutes</button>
+          <button type="button" class="chip" data-maturity-filter="stable" aria-pressed="false" data-i18n-maturity="stable">Stable</button>
+          <button type="button" class="chip" data-maturity-filter="alpha" aria-pressed="false" data-i18n-maturity="alpha">Alpha</button>
+          <button type="button" class="chip" data-maturity-filter="beta" aria-pressed="false" data-i18n-maturity="beta">Bêta</button>
+        </div>
+        <nav class="sommaire" data-i18n-aria="nav" aria-label="Catégories">
+${navCats}
+        </nav>
+        <p class="compte" id="compte" data-i18n="compte">${nbApps} applications · ${nbCats} catégories</p>
       </div>
     </div>
 
@@ -1052,7 +1339,8 @@ const html = `<!doctype html>
         decoding="async"
       />
       <div class="hero-texte">
-        <h1 data-i18n="h1">Les applications de ${COMPTE}</h1>
+        <h1 class="marque" data-i18n="marque">GuiiuG</h1>
+        <p class="sous-titre" data-i18n="sousTitre">Les applications de ${COMPTE}</p>
         <p class="chapeau" data-i18n="chapeau" data-i18n-pwa="chapeauPwa">
           Une famille d'applications web installables. Chacune s'installe depuis
           le navigateur, sans magasin d'applications, et la plupart continuent de
@@ -1062,27 +1350,18 @@ const html = `<!doctype html>
         <p class="confiance" data-i18n="confiance">
           Open source, hébergées en Europe, sans magasin — et sans compte obligatoire pour démarrer.
         </p>
+        <button type="button" class="installer" id="installer" data-i18n="installer" hidden>Installer le catalogue</button>
       </div>
     </header>
 
-    <div class="outils">
-      <label class="filtre">
-        <span class="sr-only" data-i18n="filtre">Filtrer les applications</span>
-        <input
-          type="search"
-          id="filtre"
-          data-i18n-placeholder="filtrePh"
-          placeholder="Filtrer les applications…"
-          autocomplete="off"
-          spellcheck="false"
-        />
-      </label>
-      <nav class="sommaire" data-i18n-aria="nav" aria-label="Catégories">
-${navCats}
-      </nav>
+${featuredHtml}
+
+    <div class="vide" id="filtre-vide" role="status">
+      <p data-i18n="filtreVide">Aucune application ne correspond.</p>
+      <button type="button" class="vide-effacer" id="filtre-effacer" data-i18n="filtreEffacer">Effacer le filtre</button>
     </div>
 
-    <main>
+    <main id="catalogue">
 ${sections.join('\n\n')}
 ${
   coulisses.length
@@ -1111,12 +1390,18 @@ ${coulisses.map(carteCoulisse).join('\n')}
           <span data-i18n="sponsorLink">M'offrir un café</span>
         </a>
       </p>
+      <p data-i18n="maj">Mis à jour le ${dateAfficheFr}</p>
     </footer>
     <script>
       (function () {
         var I18N = ${i18nJson};
         var root = document.documentElement;
         var themeMeta = document.getElementById('theme-color');
+        var filtre = document.getElementById('filtre');
+        var vide = document.getElementById('filtre-vide');
+        var compte = document.getElementById('compte');
+        var maturityFilter = '';
+        var deferredPrompt = null;
 
         function lang() {
           return root.lang === 'en' ? 'en' : 'fr';
@@ -1171,13 +1456,14 @@ ${coulisses.map(carteCoulisse).join('\n')}
           document.querySelectorAll('[data-set-lang]').forEach(function (btn) {
             btn.setAttribute('aria-pressed', btn.getAttribute('data-set-lang') === l ? 'true' : 'false');
           });
+          updateCompte();
         }
 
         function resolveThemeColor() {
           var th = theme();
           if (th === 'dark') return '#0f1220';
-          if (th === 'light') return '#ffffff';
-          return window.matchMedia('(prefers-color-scheme: dark)').matches ? '#0f1220' : '#ffffff';
+          if (th === 'light') return '#f7f8fc';
+          return window.matchMedia('(prefers-color-scheme: dark)').matches ? '#0f1220' : '#f7f8fc';
         }
 
         function applyTheme(th) {
@@ -1188,6 +1474,53 @@ ${coulisses.map(carteCoulisse).join('\n')}
           document.querySelectorAll('[data-set-theme]').forEach(function (btn) {
             btn.setAttribute('aria-pressed', btn.getAttribute('data-set-theme') === th ? 'true' : 'false');
           });
+        }
+
+        function updateCompte() {
+          var t = I18N[lang()];
+          var visible = 0;
+          document.querySelectorAll('main .carte[data-search]').forEach(function (carte) {
+            if (!carte.hidden) visible += 1;
+          });
+          var q = filtre ? filtre.value.trim() : '';
+          var filtered = q !== '' || maturityFilter !== '';
+          if (compte) {
+            compte.textContent = filtered
+              ? t.compteFiltre.replace('{n}', String(visible))
+              : t.compte;
+          }
+          if (vide) vide.setAttribute('data-visible', filtered && visible === 0 ? '1' : '0');
+        }
+
+        function applyFilters() {
+          var q = filtre ? filtre.value.trim().toLowerCase() : '';
+          document.querySelectorAll('main .carte[data-search]').forEach(function (carte) {
+            var textOk = q === '' || carte.getAttribute('data-search').indexOf(q) !== -1;
+            var mat = carte.getAttribute('data-maturity') || '';
+            var matOk = maturityFilter === '' || mat === maturityFilter;
+            carte.hidden = !(textOk && matOk);
+          });
+          document.querySelectorAll('main > section').forEach(function (sec) {
+            if (sec.classList.contains('coulisses')) return;
+            var cartes = sec.querySelectorAll('.carte');
+            if (!cartes.length) return;
+            var visible = false;
+            cartes.forEach(function (c) {
+              if (!c.hidden) visible = true;
+            });
+            sec.hidden = !visible;
+          });
+          updateCompte();
+        }
+
+        function clearFilters() {
+          if (filtre) filtre.value = '';
+          maturityFilter = '';
+          document.querySelectorAll('[data-maturity-filter]').forEach(function (btn) {
+            btn.setAttribute('aria-pressed', btn.getAttribute('data-maturity-filter') === '' ? 'true' : 'false');
+          });
+          applyFilters();
+          if (filtre) filtre.focus();
         }
 
         document.querySelectorAll('[data-set-lang]').forEach(function (btn) {
@@ -1204,28 +1537,90 @@ ${coulisses.map(carteCoulisse).join('\n')}
           if (theme() === 'system') applyTheme('system');
         });
 
-        var filtre = document.getElementById('filtre');
         if (filtre) {
-          filtre.addEventListener('input', function () {
-            var q = filtre.value.trim().toLowerCase();
-            document.querySelectorAll('.carte[data-search]').forEach(function (carte) {
-              carte.hidden = q !== '' && carte.getAttribute('data-search').indexOf(q) === -1;
+          filtre.addEventListener('input', applyFilters);
+        }
+        document.querySelectorAll('[data-maturity-filter]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            maturityFilter = btn.getAttribute('data-maturity-filter') || '';
+            document.querySelectorAll('[data-maturity-filter]').forEach(function (b) {
+              b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
             });
-            document.querySelectorAll('main > section').forEach(function (sec) {
-              if (sec.classList.contains('coulisses')) return;
-              var cartes = sec.querySelectorAll('.carte');
-              if (!cartes.length) return;
-              var visible = false;
-              cartes.forEach(function (c) {
-                if (!c.hidden) visible = true;
+            applyFilters();
+          });
+        });
+        var effacer = document.getElementById('filtre-effacer');
+        if (effacer) effacer.addEventListener('click', clearFilters);
+
+        document.addEventListener('keydown', function (e) {
+          if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            var tag = (e.target && e.target.tagName) || '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
+            if (!filtre) return;
+            e.preventDefault();
+            filtre.focus();
+            filtre.select();
+          }
+          if (e.key === 'Escape' && filtre && document.activeElement === filtre) {
+            clearFilters();
+          }
+        });
+
+        if ('IntersectionObserver' in window) {
+          var links = Array.prototype.slice.call(document.querySelectorAll('.sommaire a[data-cat]'));
+          var map = {};
+          links.forEach(function (a) {
+            map[a.getAttribute('data-cat')] = a;
+          });
+          var observer = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (entry) {
+                if (!entry.isIntersecting) return;
+                var id = entry.target.getAttribute('data-cat-section');
+                links.forEach(function (a) {
+                  a.removeAttribute('aria-current');
+                });
+                if (map[id]) map[id].setAttribute('aria-current', 'true');
               });
-              sec.hidden = !visible;
-            });
+            },
+            { rootMargin: '-20% 0px -65% 0px', threshold: 0 }
+          );
+          document.querySelectorAll('[data-cat-section]').forEach(function (sec) {
+            observer.observe(sec);
           });
         }
 
+        var installer = document.getElementById('installer');
+        window.addEventListener('beforeinstallprompt', function (e) {
+          if (isPwa()) return;
+          e.preventDefault();
+          deferredPrompt = e;
+          if (installer) {
+            installer.hidden = false;
+            installer.setAttribute('data-visible', '1');
+          }
+        });
+        if (installer) {
+          installer.addEventListener('click', function () {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.finally(function () {
+              deferredPrompt = null;
+              installer.hidden = true;
+              installer.removeAttribute('data-visible');
+            });
+          });
+        }
+        window.addEventListener('appinstalled', function () {
+          if (installer) {
+            installer.hidden = true;
+            installer.removeAttribute('data-visible');
+          }
+        });
+
         applyLang(lang());
         applyTheme(theme());
+        applyFilters();
 
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.register('${FAMILY_ORIGIN}/sw.js').catch(function () {});
@@ -1305,6 +1700,31 @@ self.addEventListener('fetch', event => {
 `;
 
 mkdirSync(SORTIE, { recursive: true });
+mkdirSync(join(SORTIE, 'previews'), { recursive: true });
+
+let sharpMod = null;
+try {
+  sharpMod = (await import('sharp')).default;
+} catch {
+  console.log('sharp absent — previews en taille originale');
+}
+let previewsOk = 0;
+for (const [id, url] of imageParApp) {
+  try {
+    const buf = Buffer.from(await (await fetch(url)).arrayBuffer());
+    const dest = join(SORTIE, 'previews', `${id}.jpg`);
+    if (sharpMod) {
+      await sharpMod(buf).resize({ width: 640 }).jpeg({ quality: 78, mozjpeg: true }).toFile(dest);
+    } else {
+      writeFileSync(dest, buf);
+    }
+    previewsOk += 1;
+  } catch (e) {
+    console.warn(`  ! preview ${id} : ${e.message ?? e}`);
+  }
+}
+console.log(`Previews : ${previewsOk}/${imageParApp.size}`);
+
 writeFileSync(join(SORTIE, 'index.html'), html, 'utf8');
 writeFileSync(join(SORTIE, 'robots.txt'), robots, 'utf8');
 writeFileSync(
@@ -1362,5 +1782,5 @@ console.log(
     `${sections.length} catégories, ${coulisses.length} en coulisses), ` +
     `robots.txt (${sites.filter(s => s.plan).length + 1} plans de site), sitemap.xml, ` +
     `${VERIFICATION_GOOGLE}, BingSiteAuth.xml, clé IndexNow, og-image.jpg, ` +
-    `manifest.webmanifest, sw.js, icônes PWA`
+    `previews/ (${previewsOk}), manifest.webmanifest, sw.js, icônes PWA`
 );
