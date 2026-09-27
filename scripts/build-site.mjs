@@ -1,6 +1,6 @@
 /**
  * Construit le site de la racine — `index.html`, `robots.txt`, `sitemap.xml`,
- * `llms.txt`, et le fichier de vérification de Search Console —
+ * et le fichier de vérification de Search Console —
  * dans un dossier de sortie (`_site` par défaut). Rien n'est commité : le
  * workflow `pages.yml` l'exécute au moment de PUBLIER, chaque nuit et à chaque
  * fusion.
@@ -387,23 +387,6 @@ const description =
 // Bing SEO/GEO : titre ≥ 50 car. Le H1 visible reste le nom de la famille.
 const titrePage = `Les applications de ${COMPTE} - PWA web installables hors magasin`;
 
-const appsSurOrigine = FAMILY_APPS.filter(a => surOrigine(a.appUrl));
-const llms = [
-  `# Les applications de ${COMPTE}`,
-  '',
-  `> Famille de PWA installables sous ${FAMILY_ORIGIN}/ — hors magasin d'applications, souvent utilisables hors ligne.`,
-  '',
-  '## Accueil',
-  `- Hub : ${FAMILY_ORIGIN}/`,
-  `- Code source : https://github.com/${COMPTE}`,
-  '',
-  '## Applications',
-  ...appsSurOrigine.map(
-    a => `- [${a.name}](${a.appUrl}) : ${a.description}`
-  ),
-  '',
-].join('\n');
-
 const html = `<!doctype html>
 <html lang="fr">
   <head>
@@ -581,7 +564,6 @@ mkdirSync(SORTIE, { recursive: true });
 writeFileSync(join(SORTIE, 'index.html'), html, 'utf8');
 writeFileSync(join(SORTIE, 'robots.txt'), robots, 'utf8');
 writeFileSync(join(SORTIE, 'sitemap.xml'), sitemap, 'utf8');
-writeFileSync(join(SORTIE, 'llms.txt'), llms, 'utf8');
 // Le contenu exact que Google attend, au caractère près.
 writeFileSync(
   join(SORTIE, VERIFICATION_GOOGLE),
@@ -616,6 +598,6 @@ copyFileSync(
 console.log(
   `\nÉcrit dans ${SORTIE}/ : index.html (${FAMILY_APPS.length} applications en ` +
     `${sections.length} catégories, ${coulisses.length} en coulisses), ` +
-    `robots.txt (${sites.filter(s => s.plan).length + 1} plans de site), sitemap.xml, llms.txt, ` +
+    `robots.txt (${sites.filter(s => s.plan).length + 1} plans de site), sitemap.xml, ` +
     `${VERIFICATION_GOOGLE}, BingSiteAuth.xml, clé IndexNow, og-image.jpg, favicons`
 );
