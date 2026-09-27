@@ -54,6 +54,11 @@ indexée. Elle affiche aussi l'**image de partage** de l'app (`og-image.jpg`,
 lien mort. L'image de partage de la racine reste versionnée ici :
 `static/og-image.jpg`, la mosaïque des icônes du catalogue.
 
+Le hub est lui-même **installable** (manifest + service worker + icônes
+192/512) : sur Android Chrome, menu ⋮ → « Installer l'application ». Les liens
+vers les apps s'ouvrent hors du shell du catalogue, pour que chaque PWA reste
+installable séparément (même origine `github.io`).
+
 ## Publication
 
 **Rien n'est commité.** Le workflow [`pages.yml`](.github/workflows/pages.yml)
