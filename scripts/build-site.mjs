@@ -45,6 +45,8 @@ const SORTIE = process.argv[2] ?? '_site';
 const COMPTE = 'mister-guiiug';
 const SOCLE = 'dev-pwa-config';
 const SOI = `${COMPTE}.github.io`;
+/** Handle Buy Me a Coffee de la famille — même valeur que `FUNDING.yml` / `SPONSOR_URL`. */
+const SPONSOR_URL = 'https://buymeacoffee.com/mister.guiiug';
 const JETON = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? '';
 
 /**
@@ -567,6 +569,12 @@ const html = `<!doctype html>
         color: var(--doux);
         font-size: 0.9rem;
       }
+      footer p {
+        margin: 0 0 0.5rem;
+      }
+      footer p:last-child {
+        margin-bottom: 0;
+      }
     </style>
   </head>
   <body>
@@ -598,6 +606,13 @@ ${coulisses.map(carteCoulisse).join('\n')}
       <p>
         Code source sur
         <a href="https://github.com/${COMPTE}">github.com/${COMPTE}</a>.
+      </p>
+      <p>
+        Ces applications sont gratuites et open source —
+        <a href="${SPONSOR_URL}" rel="noopener noreferrer"
+          >m'offrir un café</a
+        >
+        aide à les maintenir.
       </p>
     </footer>
   </body>
