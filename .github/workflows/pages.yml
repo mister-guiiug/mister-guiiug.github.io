@@ -15,6 +15,11 @@
 # le réseau hoquette —, rien n'est déployé et Pages continue de servir la
 # version précédente. Le job de construction tourne aussi sur les PR, comme
 # vérification, sans publier.
+#
+# UNE NUIT SANS CHANGEMENT NE SIGNALE RIEN. Les pages du hub sont datées par
+# l'empreinte de leur contenu (`seo-state.json`, relu en ligne à chaque
+# construction), et seules celles qui ont changé partent à IndexNow. Les URL des
+# applications, elles, sont signalées par chaque app à son déploiement.
 
 name: Pages
 
@@ -27,7 +32,7 @@ on:
   workflow_dispatch:
     inputs:
       indexnow-tout:
-        description: Signaler TOUTES les URL a IndexNow (premier envoi, reprise)
+        description: Signaler TOUTES les URL du hub a IndexNow (premier envoi, reprise)
         type: boolean
         default: false
 
@@ -45,6 +50,9 @@ jobs:
     name: Construire le site
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      # Les pages du hub dont le contenu a changé, en tableau JSON.
+      urls-modifiees: ${{ steps.construction.outputs.urls-modifiees }}
     steps:
       - uses: actions/checkout@v7
 
@@ -52,12 +60,18 @@ jobs:
         with:
           node-version-file: .nvmrc
 
+      # Sans réseau, avant tout : le service worker (qui ne doit toucher qu'au
+      # hub), les plans de site, les dates, le robots.txt et les pages statiques.
+      - name: Tests
+        run: node --test test/*.test.mjs
+
       # Miniatures 640w des cartes : pas de package.json sur ce dépôt, install
       # éphémère. Sans sharp, le build recopie quand même les og-image.
       - name: Installer sharp (miniatures hub)
         run: npm install --no-save sharp@0.34.4
 
-      - name: Engendrer index.html, robots.txt, sitemap.xml et la vérification Search Console
+      - name: Engendrer le hub, ses pages, ses plans de site, robots.txt et les vérifications
+        id: construction
         run: node scripts/build-site.mjs _site
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -84,9 +98,10 @@ jobs:
 
       # IndexNow (Bing, DuckDuckGo, Ecosia, Qwant, Yandex…) : APRÈS la
       # publication, la clé doit être en ligne pour être vérifiée. Seules les
-      # URL dont le `lastmod` date d'hier ou d'aujourd'hui partent ; un
-      # lancement manuel avec « tout » les envoie toutes. Un échec ici ne
-      # défait rien : le site est déjà publié.
+      # pages DU HUB dont le contenu a changé partent (sortie `urls-modifiees`
+      # de la construction) ; un lancement manuel avec « tout » envoie toutes
+      # celles du plan du hub. Les apps signalent les leurs à leur déploiement.
+      # Un échec ici ne défait rien : le site est déjà publié.
       #
       # ATTENDRE QUE L'ORIGINE RÉPONDE 200. `deploy-pages` rend la main dès que
       # GitHub a accepté l'artefact ; Fastly peut encore servir un 404 en cache
@@ -97,6 +112,7 @@ jobs:
         with:
           node-version-file: .nvmrc
       - name: Attendre que Pages serve l'accueil
+        if: needs.construire.outputs.urls-modifiees != '[]' || inputs.indexnow-tout
         run: |
           for i in $(seq 1 30); do
             code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 \
@@ -106,6 +122,10 @@ jobs:
             sleep 10
           done
           echo "::warning::L'accueil ne répond pas encore 200 — IndexNow vérifiera chaque URL."
-      - name: Signaler les pages modifiées à IndexNow
+      - name: Signaler à IndexNow les pages du hub qui ont changé
+        if: needs.construire.outputs.urls-modifiees != '[]' || inputs.indexnow-tout
         continue-on-error: true
+        env:
+          # Passée par l'environnement, jamais recopiée dans le script du shell.
+          URLS_MODIFIEES: ${{ needs.construire.outputs.urls-modifiees }}
         run: node scripts/indexnow.mjs ${{ inputs.indexnow-tout && '--tout' || '' }}
