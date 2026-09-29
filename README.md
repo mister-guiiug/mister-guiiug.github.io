@@ -42,26 +42,53 @@ catégories.
 L'API GitHub ne sert plus qu'à trouver la dernière version publiée du socle, et
 à ce que le catalogue ignore :
 
-- le **`robots.txt`**, qui déclare le plan de site de _tous_ les sites publiés,
+- l'**index des plans de site**, qui nomme le plan de _tous_ les sites publiés,
   infrastructure comprise ;
 - la section **« Dans les coulisses »** : les sites publiés qui ne sont pas des
   applications du catalogue. Calculée, jamais écrite à la main — un nouveau site
-  d'infrastructure y apparaît de lui-même.
+  d'infrastructure y apparaît de lui-même ;
+- la dernière version publiée d'une application de bureau, pour sa page du hub.
 
 Chaque carte d'application porte aussi un lien « Guide » vers sa première
-**page de contenu** (socle 6.17.0 : `content/pages/<slug>.md` → `<slug>.html`),
-lue dans le plan de site de l'app, avec son titre en infobulle. C'est le lien
-qui la relie à la seule page du parc déjà indexée. Elle affiche aussi une
-miniature de l'**image de partage** de l'app (`og-image.jpg`, 1200×630), sondée
-à la construction puis réduite à 640 px en JPEG et en WebP dans `previews/` :
-absente, la carte montre l'initiale de l'app. L'image de partage de la racine
-reste versionnée ici : `static/og-image.jpg`, la mosaïque des icônes du
+**page de contenu** en français (socle 6.17.0 : `content/pages/<slug>.md` →
+`<slug>.html`), lue dans le plan de site de l'app, avec son titre en infobulle.
+La section **« Guides pratiques »** les liste TOUTES, françaises et anglaises,
+avec leur titre (`<h1>`) pour ancre, groupées par catégorie ; celle du
+squelette y figure aussi. Chaque carte affiche une miniature de l'**image de
+partage** de l'app (`og-image.jpg`, 1200×630), sondée à la construction puis
+réduite à 640 px en JPEG et en WebP dans `previews/`, avec un `alt` qui la
+décrit ; absente, la carte montre l'initiale de l'app. L'image de partage de la
+racine reste versionnée ici : `static/og-image.jpg`, la mosaïque des icônes du
 catalogue.
+
+Trois **pages statiques**, sans script, s'ajoutent à l'accueil
+(`scripts/pages-hub.mjs`, `scripts/page-a-propos.mjs`) :
+
+- `a-propos.html` : qui publie ces applications, pourquoi, et ce que chacune
+  fait de vos données, selon son type (relevé dans le code des apps) ;
+- `mister-quota.html` : la page de l'application de bureau, qui n'a pas de site
+  Pages ; sa carte y mène ;
+- `404.html`, en `noindex` : GitHub Pages la sert pour toute URL inconnue sous
+  la racine.
+
+L'éditeur est une seule entité JSON-LD, `https://mister-guiiug.github.io/#org`
+(`alternateName` « GuiiuG », `logo`, `sameAs` GitHub), la même sur toutes les
+pages.
 
 Le hub est lui-même **installable** (manifest + service worker + icônes
 192/512) : sur Android Chrome, menu ⋮ → « Installer l'application ». Les liens
 vers les apps s'ouvrent hors du shell du catalogue, pour que chaque PWA reste
 installable séparément (même origine `github.io`).
+
+**Son service worker ne touche qu'au hub** (`scripts/hub-sw.mjs`). Servi depuis
+`/sw.js`, il a pour portée toute l'origine, apps comprises. Il ne supprime donc
+que ses propres caches (`hub-*`), et ne répond qu'aux fichiers de premier
+niveau du hub et à `/previews/`. Tout ce qui est sous `/<app>/`, et toute autre
+origine, passe sans lui. Jusqu'à `hub-v4`, il vidait le précache Workbox des
+apps à chaque activation.
+
+Le `<title>` reste le titre long : le titre court « GuiiuG » ne s'affiche que
+dans la fenêtre de l'app installée, et jamais pour un robot.
 
 La page propose un bascule **FR / EN** (catégories et maturités du socle,
 descriptions EN locales au hub) et un thème **clair / sombre / système**,
@@ -70,13 +97,31 @@ mémorisés dans `localStorage`.
 ## Publication
 
 **Rien n'est commité.** Le workflow [`pages.yml`](.github/workflows/pages.yml)
-engendre la page et ses fichiers (`index.html`, `robots.txt`, `sitemap.xml`,
-manifeste, service worker, page hors ligne, vérifications Google et Bing, clé
-IndexNow, miniatures, icônes) au moment de publier et les téléverse comme
-artefact Pages — aucun `git push`, donc la protection de `main` reste entière.
+engendre la page et ses fichiers (`index.html`, `a-propos.html`,
+`mister-quota.html`, `404.html`, `robots.txt`, `sitemap.xml`,
+`sitemap-hub.xml`, `seo-state.json`, manifeste, service worker, page hors
+ligne, vérifications Google et Bing, clé IndexNow, miniatures, icônes) au
+moment de publier et les téléverse comme artefact Pages — aucun `git push`,
+donc la protection de `main` reste entière.
 
 Il tourne **chaque nuit**, à chaque fusion, et à la demande. Sur une PR, il
 construit sans publier.
+
+**Pour les robots :**
+
+- `robots.txt` autorise tout, à tous, et l'écrit robot par robot : moteurs de
+  recherche et de réponse d'un côté, robots d'entraînement de l'autre. Il ne
+  déclare qu'un plan de site, l'index.
+- `/sitemap.xml` est un **index** : il nomme `/sitemap-hub.xml` (les pages du
+  hub) et le plan de chaque site publié sous l'origine.
+- Le `lastmod` d'une page du hub vient de l'**empreinte de son contenu**, date
+  affichée exclue. `seo-state.json` garde, pour chaque URL, son empreinte et
+  son `lastmod`. Il est relu en ligne avant chaque construction : même
+  empreinte, même date. « Mis à jour le … » affiche cette date, celle du
+  dernier vrai changement.
+- **IndexNow** ne reçoit que les pages du hub dont le contenu a changé à cette
+  publication (`scripts/indexnow.mjs`), après avoir attendu qu'elles répondent
+  200. Chaque application signale les siennes à son propre déploiement.
 
 **Échouer est sûr.** Si une application du catalogue ne répond pas, la
 construction échoue et rien n'est déployé : Pages continue de servir la version
@@ -85,6 +130,7 @@ précédente. On ne publie jamais une page qui promettrait un 404.
 ## Construire en local
 
 ```bash
+node --test test/*.test.mjs   # sans réseau : worker, plans de site, robots.txt, pages
 node scripts/build-site.mjs _site
 ```
 
@@ -92,5 +138,6 @@ Aucune dépendance obligatoire : Node et le réseau suffisent. Pour des miniatur
 identiques à celles de la CI (640 px, JPEG et WebP), installer d'abord sharp
 (`npm install --no-save sharp@0.34.4`) ; sans lui, les images sont recopiées en
 taille réelle et aucun WebP n'est produit. Un `GITHUB_TOKEN` (ou `GH_TOKEN`)
-dans l'environnement relève la limite de l'API, mais les deux requêtes passent
-sans. Le dossier `_site/` est ignoré par git.
+dans l'environnement relève la limite de l'API, mais ses trois requêtes passent
+sans. La construction relit aussi `seo-state.json` en ligne : sans réseau vers
+l'origine, les pages du hub sont datées du jour, sans échec. Le dossier `_site/` est ignoré par git.

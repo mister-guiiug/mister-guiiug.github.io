@@ -1,9 +1,17 @@
 /**
- * Construit le site de la racine — `index.html`, `robots.txt`, `sitemap.xml`,
- * et le fichier de vérification de Search Console —
- * dans un dossier de sortie (`_site` par défaut). Rien n'est commité : le
- * workflow `pages.yml` l'exécute au moment de PUBLIER, chaque nuit et à chaque
- * fusion.
+ * Construit le site de la racine — `index.html`, les pages statiques
+ * (`a-propos.html`, `mister-quota.html`, `404.html`), `robots.txt`, l'index des
+ * plans de site (`sitemap.xml`) et celui du hub (`sitemap-hub.xml`),
+ * `seo-state.json`, le service worker et les fichiers de vérification — dans un
+ * dossier de sortie (`_site` par défaut). Rien n'est commité : le workflow
+ * `pages.yml` l'exécute au moment de PUBLIER, chaque nuit et à chaque fusion.
+ *
+ * LES DATES SONT CELLES DU CONTENU, PAS DU BUILD. Chaque page du hub est
+ * engendrée avec des jetons à la place de sa date affichée ; son empreinte est
+ * calculée sur ce texte, puis comparée à celle de la publication précédente
+ * (`seo-state.json`, relu en ligne). Même empreinte : même `lastmod`, même « Mis
+ * à jour le ». Seules les pages qui ont réellement changé partent à IndexNow
+ * (sortie `urls-modifiees`, lue par le job « Publier »).
  *
  * LA LISTE DES APPLICATIONS VIENT DU CATALOGUE DU SOCLE, pas de GitHub.
  * `FAMILY_APPS` (`@mister-guiiug/dev-pwa-config/apps-catalog`) est la liste que
@@ -19,13 +27,15 @@
  * `react/labels-fr.js` — sont autonomes (aucun import) : ils s'importent tels
  * quels depuis leur texte, sans installer le paquet ni jeton de registre.
  *
- * L'API GITHUB NE SERT PLUS QU'À DEUX CHOSES, que le catalogue ne sait pas :
- *   1. le `robots.txt`, qui doit déclarer le plan de site de TOUS les sites
- *      publiés sous l'origine — outils compris ;
+ * L'API GITHUB NE SERT PLUS QU'À CE QUE LE CATALOGUE NE SAIT PAS :
+ *   1. l'index des plans de site (`sitemap.xml`), qui doit nommer le plan de
+ *      TOUS les sites publiés sous l'origine — outils compris ;
  *   2. la section « Dans les coulisses » : les sites publiés qui ne sont PAS des
  *      applications du catalogue (le showroom du socle, le squelette, le tableau
  *      de bord). Calculée, jamais écrite à la main : un nouveau site
- *      d'infrastructure y apparaît de lui-même.
+ *      d'infrastructure y apparaît de lui-même ;
+ *   3. la dernière version publiée d'une application de bureau, pour sa page
+ *      du hub.
  *
  * ÉCHOUER EST SÛR. Si une application du catalogue ne répond pas, la
  * construction échoue — et Pages continue de servir la version précédente. On
@@ -34,12 +44,40 @@
  *
  * Usage : node scripts/build-site.mjs [dossier-de-sortie]
  * Un `GITHUB_TOKEN` (ou `GH_TOKEN`) dans l'environnement relève la limite de
- * l'API ; sans lui, les deux requêtes passent quand même.
+ * l'API ; sans lui, ses quelques requêtes passent quand même.
  */
 import { createHash } from 'node:crypto';
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
+import { serviceWorkerHub } from './hub-sw.mjs';
 import { INDEXNOW_CLE } from './indexnow-cle.mjs';
+import { appsNonRelevees, pageAPropos } from './page-a-propos.mjs';
+import {
+  JETONS,
+  PAGES_BUREAU,
+  dater,
+  entiteEditeur,
+  entiteSite,
+  jsonLdTexte,
+  page404,
+} from './pages-hub.mjs';
+import {
+  MOTIF_ROBOT,
+  datesDeModification,
+  dernierLastmod,
+  empreinte,
+  indexDePlans,
+  lireEtatEnLigne,
+  planDeSite,
+  robotsTxt,
+  urlsDuPlan,
+} from './seo-hub.mjs';
 
 const SORTIE = process.argv[2] ?? '_site';
 const COMPTE = 'mister-guiiug';
@@ -104,6 +142,23 @@ async function api(chemin) {
   return r.json();
 }
 
+/**
+ * Comme `api`, mais un 404 est une RÉPONSE : `null` (« pas de version publiée »).
+ * Toute autre erreur fait échouer la construction, comme `api` : une page qui
+ * dirait « aucun installateur » parce que l'API a hoqueté mentirait.
+ */
+async function apiOuNull(chemin) {
+  const r = await fetch(`https://api.github.com/${chemin}`, {
+    headers: {
+      accept: 'application/vnd.github+json',
+      ...(JETON ? { authorization: `Bearer ${JETON}` } : {}),
+    },
+  });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`API GitHub ${chemin} → HTTP ${r.status}`);
+  return r.json();
+}
+
 /** Code HTTP d'une URL, retenté : une sonde isolée qui échoue ne prouve rien. */
 async function statut(url, essais = 3) {
   for (let i = 1; i <= essais; i += 1) {
@@ -122,41 +177,59 @@ const ENTITES = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" };
 const decode = t => t.replace(/&(amp|lt|gt|quot|#39);/g, (_, e) => ENTITES[e]);
 
 /**
- * Les pages de contenu d'une application : les URL de son plan de site autres
- * que l'accueil, avec le titre (`<h1>`) de chacune. Depuis le socle 6.17.0,
- * chaque `content/pages/<slug>.md` d'une app devient `<slug>.html` et entre à
- * son plan de site. Les lister ICI donne à chacune un lien depuis la seule page
- * du parc déjà indexée. Une page qui ne répond pas est simplement omise.
+ * Le texte d'une URL, ou `null`, retenté. UNE LECTURE MANQUÉE CHANGERAIT LA
+ * PAGE : un guide omis un soir, puis revenu le lendemain, ferait bouger deux
+ * fois l'empreinte de l'accueil, donc son `lastmod`, et partir deux signalements
+ * IndexNow pour rien. Un 404 est une réponse, pas une panne : pas de nouvel essai.
  */
-async function pagesDe(appUrl) {
-  try {
-    const r = await fetch(`${appUrl}sitemap.xml`);
-    if (!r.ok) return [];
-    const locs = [...(await r.text()).matchAll(/<loc>([^<]+)<\/loc>/g)]
-      .map(m => decode(m[1]))
-      .filter(u => u !== appUrl && u.startsWith(appUrl));
-    const pages = [];
-    for (const url of locs) {
-      const p = await fetch(url);
-      if (!p.ok) continue;
-      const titre = /<h1[^>]*>([^<]+)<\/h1>/i.exec(await p.text())?.[1]?.trim();
-      if (titre) pages.push({ url, titre: decode(titre) });
+async function lire(url, essais = 3) {
+  for (let i = 1; i <= essais; i += 1) {
+    try {
+      const r = await fetch(url);
+      if (r.ok) return await r.text();
+      if (r.status === 404) return null;
+    } catch {
+      // réseau : on retente
     }
-    return pages;
-  } catch {
-    return [];
+    if (i < essais) await new Promise(ok => setTimeout(ok, 1500 * i));
   }
+  return null;
+}
+
+/**
+ * Les pages de contenu d'un site : les URL de son plan de site autres que
+ * l'accueil, avec le titre (`<h1>`) et la langue (`<html lang>`) de chacune, et
+ * le `lastmod` le plus récent du plan (pour l'index des plans de site). Depuis
+ * le socle 6.17.0, chaque `content/pages/<slug>.md` d'une app devient
+ * `<slug>.html` et entre à son plan de site ; les pages anglaises y entreront de
+ * même. Les lister ICI donne à chacune un lien depuis le hub, avec son titre pour
+ * ancre. Une page qui ne répond pas est simplement omise.
+ */
+async function pagesDe(base) {
+  const xml = await lire(`${base}sitemap.xml`);
+  if (!xml) return { pages: [], lastmod: null };
+  const entrees = urlsDuPlan(xml);
+  const pages = [];
+  for (const { loc } of entrees) {
+    if (loc === base || !loc.startsWith(base)) continue;
+    const html = await lire(loc);
+    if (!html) continue;
+    const titre = /<h1[^>]*>([\s\S]*?)<\/h1>/i
+      .exec(html)?.[1]
+      ?.replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const langue = (/<html[^>]*\slang="([a-z]{2})/i.exec(html)?.[1] ?? 'fr').toLowerCase();
+    if (titre) pages.push({ url: loc, titre: decode(titre), langue });
+  }
+  return { pages, lastmod: dernierLastmod(entrees) };
 }
 
 /** Titre annoncé par un site, ou `null`. */
 async function titreDe(url) {
-  try {
-    const html = await (await fetch(url)).text();
-    const m = html.match(/<title>([^<]*)<\/title>/i);
-    return m?.[1].trim() || null;
-  } catch {
-    return null;
-  }
+  const html = await lire(url);
+  const titre = html?.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1].trim();
+  return titre ? decode(titre) : null;
 }
 
 /**
@@ -195,6 +268,20 @@ const libellesFr = (await moduleDuSocle(version, 'react/labels-fr.js')).default;
 const libellesEn = (await moduleDuSocle(version, 'react/labels-en.js')).default;
 const { FAMILY_APPS, CATEGORIES, FAMILY_ORIGIN } = catalogue;
 
+// UN SEUL ÉDITEUR. Le socle exporte le même nœud `#org` (`PUBLISHER`, à partir
+// de sa 6.19.0) pour que les apps et leurs pages le reprennent : si les deux
+// déclarations divergeaient, le graphe retrouverait deux éditeurs sous un
+// même `@id`. La CI le signale.
+{
+  const canon = o => JSON.stringify(Object.keys(o ?? {}).sort().map(k => [k, o[k]]));
+  const duHub = entiteEditeur({ origine: FAMILY_ORIGIN, compte: COMPTE });
+  if (catalogue.PUBLISHER && canon(catalogue.PUBLISHER) !== canon(duHub)) {
+    console.log(
+      `::warning::L'éditeur #org du hub diffère de PUBLISHER du socle ${version} : aligner entiteEditeur (scripts/pages-hub.mjs).`
+    );
+  }
+}
+
 /**
  * Descriptions EN du catalogue — le socle ne les porte qu'en français
  * (langue de référence). Le hub les double ici pour le bascule FR/EN.
@@ -232,9 +319,12 @@ const DESC_EN = {
 };
 
 console.log('Sites publiés…');
-const depots = (
+const depotsPublics = (
   await api(`users/${COMPTE}/repos?per_page=100&type=owner`)
-).filter(d => !d.private && !d.archived && d.has_pages && d.name !== SOI);
+).filter(d => !d.private && !d.archived);
+const depots = depotsPublics.filter(d => d.has_pages && d.name !== SOI);
+/** Les dépôts qui acceptent des issues : le contact de la page « À propos ». */
+const avecIssues = new Set(depotsPublics.filter(d => d.has_issues).map(d => d.name));
 
 // ---------------------------------------------------------------------------
 // Sondes
@@ -246,6 +336,8 @@ console.log(`${FAMILY_APPS.length} applications au catalogue :`);
 const enPanne = [];
 /** id de l'app → ses pages de contenu. */
 const pagesParApp = new Map();
+/** URL de base d'un site → `lastmod` le plus récent de son plan de site. */
+const lastmodParPlan = new Map();
 /**
  * id de l'app → URL distante de son og-image (1200×630), si elle répond.
  * À la publication on en écrit une miniature 640w dans `previews/<id>.jpg`
@@ -259,8 +351,10 @@ for (const app of FAMILY_APPS) {
     continue;
   }
   const code = await statut(app.appUrl);
-  const pages = code === 200 ? await pagesDe(app.appUrl) : [];
+  const { pages, lastmod } =
+    code === 200 ? await pagesDe(app.appUrl) : { pages: [], lastmod: null };
   pagesParApp.set(app.id, pages);
+  lastmodParPlan.set(app.appUrl, lastmod);
   const imageUrl = `${app.appUrl}og-image.jpg`;
   const aImage = code === 200 && (await statut(imageUrl)) === 200;
   if (aImage) imageParApp.set(app.id, imageUrl);
@@ -281,70 +375,64 @@ if (enPanne.length) {
 
 const idsCatalogue = new Set(FAMILY_APPS.map(a => a.id));
 const sites = [];
+/** Nom du site hors catalogue → ses pages de contenu (le squelette en a une). */
+const pagesParSite = new Map();
 for (const d of depots) {
   const base = `${FAMILY_ORIGIN}/${d.name}/`;
   const plan = (await statut(`${base}sitemap.xml`)) === 200;
   const estApp = idsCatalogue.has(d.name);
   const titre = estApp ? null : ((await titreDe(base)) ?? d.name);
+  if (plan && !lastmodParPlan.has(base)) {
+    const { pages, lastmod } = await pagesDe(base);
+    lastmodParPlan.set(base, lastmod);
+    if (!estApp) pagesParSite.set(d.name, pages);
+  }
   sites.push({ nom: d.name, base, plan, estApp, titre, desc: d.description });
 }
 const coulisses = sites
   .filter(s => !s.estApp)
   .sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
 
+/**
+ * Les applications de bureau qui ont une page sur le hub : elles n'ont pas de
+ * site Pages, c'est leur seule présence indexable sur l'origine. Leur dernière
+ * version publiée est lue sur l'API, pour ne jamais annoncer un installateur
+ * qui n'existe pas.
+ */
+const bureau = [];
+for (const app of FAMILY_APPS) {
+  if (surOrigine(app.appUrl) || !PAGES_BUREAU[app.id]) continue;
+  const derniere = await apiOuNull(`repos/${COMPTE}/${app.id}/releases/latest`);
+  bureau.push({
+    app,
+    chemin: `/${app.id}.html`,
+    version: derniere
+      ? { tag: derniere.tag_name, url: derniere.html_url, date: derniere.published_at?.slice(0, 10) ?? null }
+      : null,
+  });
+  console.log(`  · ${app.id.padEnd(20)} page du hub /${app.id}.html · ${derniere ? derniere.tag_name : 'aucune version publiée'}`);
+}
+const pageDeBureau = new Map(bureau.map(b => [b.app.id, b]));
+
 // ---------------------------------------------------------------------------
 // robots.txt — lu SEULEMENT à la racine d'une origine
 // ---------------------------------------------------------------------------
 
-const robots = `# ${FAMILY_ORIGIN}/robots.txt
-#
-# Un robots.txt n'est lu QU'À LA RACINE d'une origine. Celui d'un sous-chemin
-# — /miss-dice/robots.txt, par exemple — est ignoré des robots, et le plan de
-# site qu'il déclare avec lui. Ce fichier rassemble donc, au seul endroit qui
-# soit lu, les plans de site de tous les sites servis sous cette origine.
-#
-# Engendré à la publication par scripts/build-site.mjs : chaque plan de site
-# ci-dessous répondait 200 à ce moment-là.
-
-User-agent: *
-Allow: /
-
-User-agent: bingbot
-Allow: /
-
-Sitemap: ${FAMILY_ORIGIN}/sitemap.xml
-${sites
-  .filter(s => s.plan)
-  .sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
-  .map(s => `Sitemap: ${s.base}sitemap.xml`)
-  .join('\n')}
-`;
-
-// `lastmod` : le seul champ du plan de site que Google lise vraiment
-// (`changefreq` et `priority` sont ignorés). La page change quand le catalogue
-// change, et le catalogue n'arrive ici qu'à la publication : le jour de la
-// construction est donc la bonne date.
-const aujourdhui = new Date().toISOString().slice(0, 10);
-const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>${FAMILY_ORIGIN}/</loc>
-    <lastmod>${aujourdhui}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-</urlset>
-`;
+// Une seule ligne `Sitemap:`, vers l'index : voir scripts/seo-hub.mjs.
+const robots = robotsTxt({ origine: FAMILY_ORIGIN });
 
 // ---------------------------------------------------------------------------
-// Données structurées — le site, et la liste de ses applications
+// Données structurées — le site, son éditeur, et la liste de ses applications
 // ---------------------------------------------------------------------------
 
 /**
- * Un `WebSite` et un `ItemList` : ce que la page EST (l'accueil d'une famille
- * d'applications), et ce qu'elle liste. Chaque application porte déjà son
- * propre `WebApplication` (socle, `pwaSeoPlugin`) ; ici on ne fait que les
- * nommer et les relier, par leur URL.
+ * Un `WebSite`, son éditeur et un `ItemList` : ce que la page EST (l'accueil
+ * d'une famille d'applications), qui la publie, et ce qu'elle liste. Chaque
+ * application porte déjà son propre `WebApplication` (socle, `pwaSeoPlugin`) ;
+ * ici on ne fait que les nommer et les relier, par leur URL.
+ *
+ * L'ÉDITEUR EST UNE SEULE ENTITÉ, `#org`, la même sur toutes les pages du hub
+ * (scripts/pages-hub.mjs) et celle que le socle référencera par son `@id`.
  *
  * `<` est échappé : une description contenant `</script>` fermerait le bloc.
  */
@@ -352,40 +440,31 @@ const donneesStructurees = {
   '@context': 'https://schema.org',
   '@graph': [
     {
-      '@type': 'WebSite',
-      '@id': `${FAMILY_ORIGIN}/#site`,
-      name: `Les applications de ${COMPTE}`,
-      url: `${FAMILY_ORIGIN}/`,
-      inLanguage: 'fr',
-      publisher: { '@id': `${FAMILY_ORIGIN}/#org` },
+      ...entiteSite({ origine: FAMILY_ORIGIN, compte: COMPTE }),
       potentialAction: {
         '@type': 'ViewAction',
         target: `${FAMILY_ORIGIN}/`,
         name: `Les applications de ${COMPTE}`,
       },
     },
-    {
-      '@type': 'Organization',
-      '@id': `${FAMILY_ORIGIN}/#org`,
-      name: COMPTE,
-      url: `${FAMILY_ORIGIN}/`,
-      sameAs: [`https://github.com/${COMPTE}`],
-    },
+    entiteEditeur({ origine: FAMILY_ORIGIN, compte: COMPTE }),
     {
       '@type': 'ItemList',
-      name: `Applications web de ${COMPTE}`,
-      itemListElement: FAMILY_APPS.filter(a => surOrigine(a.appUrl)).map(
-        (a, i) => ({
-          '@type': 'ListItem',
-          position: i + 1,
-          url: a.appUrl,
-          name: a.name,
-        })
-      ),
+      name: `Applications de ${COMPTE}`,
+      // Les apps servies sur l'origine, et les apps de bureau par leur page du
+      // hub : l'adresse d'un dépôt GitHub n'est pas une page du parc.
+      itemListElement: FAMILY_APPS.filter(
+        a => surOrigine(a.appUrl) || pageDeBureau.has(a.id)
+      ).map((a, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        url: surOrigine(a.appUrl) ? a.appUrl : `${FAMILY_ORIGIN}${pageDeBureau.get(a.id).chemin}`,
+        name: a.name,
+      })),
     },
   ],
 };
-const jsonLd = JSON.stringify(donneesStructurees).replace(/</g, '\\u003c');
+const jsonLd = jsonLdTexte(donneesStructurees);
 
 // ---------------------------------------------------------------------------
 // index.html — groupé par catégorie, dans l'ordre du catalogue
@@ -408,14 +487,21 @@ const maturite = m =>
 const lienHorsShell = (url, texte, attrs = '') =>
   `<a href="${echappe(url)}" target="_blank" rel="noopener noreferrer"${attrs}>${texte}</a>`;
 
-const visuelPreview = (id, sizes) => `
+/**
+ * La vignette d'une app : la miniature de son image de partage. Son `alt` la
+ * décrit (« Aperçu de Miss Dice ») : vide, Bing la comptait parmi les images
+ * sans texte de remplacement, vingt sur la page. Le bascule FR/EN le traduit.
+ */
+const visuelPreview = (id, nom, sizes) => `
             <span class="visuel">
               <picture>
                 <source type="image/webp" srcset="${FAMILY_ORIGIN}/previews/${echappe(id)}.webp" />
                 <img
                   class="visuel-img"
                   src="${FAMILY_ORIGIN}/previews/${echappe(id)}.jpg"
-                  alt=""
+                  alt="${echappe(`Aperçu de ${nom}`)}"
+                  data-alt-fr="${echappe(`Aperçu de ${nom}`)}"
+                  data-alt-en="${echappe(`Preview of ${nom}`)}"
                   width="640"
                   height="336"
                   sizes="${echappe(sizes)}"
@@ -433,17 +519,35 @@ const visuelMono = nom => {
             </span>`;
 };
 
+/** Le guide d'une carte : le premier en français, langue du hub servi. */
+const guideDeCarte = pages => pages.find(p => p.langue === 'fr') ?? pages[0];
+
+/**
+ * Le lien principal d'une carte. Une app web s'ouvre hors du shell du hub ;
+ * une app de bureau mène à SA PAGE DU HUB, qui dit ce qu'elle est et comment
+ * l'obtenir : c'est une page du hub, elle s'ouvre donc sur place.
+ */
+const lienPrincipal = (app, texte, attrs) => {
+  const page = pageDeBureau.get(app.id);
+  return page
+    ? `<a href="${FAMILY_ORIGIN}${page.chemin}"${attrs}>${texte}</a>`
+    : lienHorsShell(app.appUrl, texte, attrs);
+};
+
 const carteApp = (app, featuredId) => {
   const bureau = app.platform === 'desktop';
   const pages = pagesParApp.get(app.id) ?? [];
   const aImage = imageParApp.has(app.id);
   const descEn = DESC_EN[app.id] ?? app.description;
-  const premierePage = pages[0];
+  const premierePage = guideDeCarte(pages);
   const plateforme = bureau ? 'desktop' : 'web';
   const aLaUne = featuredId && app.id === featuredId;
+  const libelleOuvrir = pageDeBureau.has(app.id)
+    ? '<span data-i18n="presentation">Présentation</span>'
+    : '<span data-i18n="ouvrir">Ouvrir</span>';
   const actions = `
             <p class="actions">
-              ${lienHorsShell(app.appUrl, '<span data-i18n="ouvrir">Ouvrir</span>', ' class="action action-ouvrir"')}
+              ${lienPrincipal(app, libelleOuvrir, ' class="action action-ouvrir"')}
               ${
                 premierePage
                   ? lienHorsShell(
@@ -462,11 +566,13 @@ const carteApp = (app, featuredId) => {
     libellesEn.categories?.[app.category] ?? '',
     app.maturity,
     plateforme,
+    // Chercher « yahtzee » trouve Miss Dice : le titre de ses guides en parle.
+    ...pages.map(p => p.titre),
   ]
     .join(' ')
     .toLowerCase();
   const visuel = aImage
-    ? visuelPreview(app.id, '(max-width: 40rem) 100vw, 320px')
+    ? visuelPreview(app.id, app.name, '(max-width: 40rem) 100vw, 320px')
     : visuelMono(app.name);
   const badgeBureau = bureau
     ? ` <span class="badge" data-i18n="badgeDesktop">${echappe('Application de bureau')}</span>`
@@ -480,7 +586,7 @@ const carteApp = (app, featuredId) => {
   const rang =
     app.maturity === 'stable' ? '0' : app.maturity === 'beta' ? '1' : '2';
   return `          <li class="${classes}" data-search="${echappe(recherche)}" data-maturity="${echappe(app.maturity)}" data-platform="${plateforme}" data-cat="${echappe(app.category)}" data-name="${echappe(app.name.toLowerCase())}" data-rang="${rang}">
-            ${lienHorsShell(app.appUrl, '', ` class="carte-hit" tabindex="-1" aria-hidden="true"`)}
+            ${lienPrincipal(app, '', ` class="carte-hit" tabindex="-1" aria-hidden="true"`)}
 ${visuel}
             <div class="corps">
               <h3><span class="nom">${echappe(app.name)}</span>${maturite(app.maturity)}${badgeBureau}${badgeUne}</h3>
@@ -532,7 +638,7 @@ ${apps.map(a => carteApp(a, featuredId)).join('\n')}
 }).filter(Boolean);
 
 const featuredPages = featuredApp ? (pagesParApp.get(featuredApp.id) ?? []) : [];
-const featuredGuide = featuredPages[0];
+const featuredGuide = guideDeCarte(featuredPages);
 const featuredDescEn = featuredApp
   ? (DESC_EN[featuredApp.id] ?? featuredApp.description)
   : '';
@@ -541,13 +647,13 @@ const featuredHtml = featuredApp
     <aside class="projecteur" aria-labelledby="projecteur-titre">
       <p class="projecteur-label" id="projecteur-titre" data-i18n="projecteur">Coup de projecteur</p>
       <div class="projecteur-carte">
-        ${lienHorsShell(featuredApp.appUrl, '', ` class="carte-hit" tabindex="-1" aria-hidden="true"`)}
-${imageParApp.has(featuredApp.id) ? visuelPreview(featuredApp.id, '(max-width: 40rem) 100vw, 480px').replace('loading="lazy"', '') : visuelMono(featuredApp.name)}
+        ${lienPrincipal(featuredApp, '', ` class="carte-hit" tabindex="-1" aria-hidden="true"`)}
+${imageParApp.has(featuredApp.id) ? visuelPreview(featuredApp.id, featuredApp.name, '(max-width: 40rem) 100vw, 480px').replace('loading="lazy"', '') : visuelMono(featuredApp.name)}
         <div class="corps">
           <h2 class="projecteur-nom">${echappe(featuredApp.name)}</h2>
           <p data-fr="${echappe(featuredApp.description)}" data-en="${echappe(featuredDescEn)}">${echappe(featuredApp.description)}</p>
           <p class="actions">
-            ${lienHorsShell(featuredApp.appUrl, '<span data-i18n="ouvrir">Ouvrir</span>', ' class="action action-ouvrir"')}
+            ${lienPrincipal(featuredApp, pageDeBureau.has(featuredApp.id) ? '<span data-i18n="presentation">Présentation</span>' : '<span data-i18n="ouvrir">Ouvrir</span>', ' class="action action-ouvrir"')}
             ${
               featuredGuide
                 ? lienHorsShell(
@@ -568,13 +674,96 @@ const urlsHasard = FAMILY_APPS.filter(
 ).map(a => a.appUrl);
 const hasardJson = JSON.stringify(urlsHasard).replace(/</g, '\\u003c');
 
-const carteCoulisse = s => `          <li class="carte">
+const carteCoulisse = s => {
+  // Le squelette a sa page de contenu : elle n'était liée de nulle part.
+  const guide = guideDeCarte(pagesParSite.get(s.nom) ?? []);
+  return `          <li class="carte">
             ${lienHorsShell(`/${s.nom}/`, '', ` class="carte-hit" aria-label="${echappe(s.titre)}"`)}
             <div class="corps">
               <h3><span class="nom">${echappe(s.titre)}</span></h3>
-              <p>${echappe(s.desc)}</p>
+              <p>${echappe(s.desc)}</p>${
+                guide
+                  ? `
+              <p class="actions">
+                ${lienHorsShell(guide.url, '<span data-i18n="guide">Guide</span>', ` class="action action-guide guide-lien" title="${echappe(guide.titre)}"`)}
+              </p>`
+                  : ''
+              }
             </div>
           </li>`;
+};
+
+// ---------------------------------------------------------------------------
+// Guides pratiques — TOUTES les pages de contenu, dans le HTML servi
+// ---------------------------------------------------------------------------
+
+/** « PWA Starter Kit - squelette… » → « PWA Starter Kit » : le nom, sans l'accroche. */
+const nomCourt = titre => String(titre).split(/\s[-–—]\s/)[0].trim();
+
+/**
+ * LES GUIDES, TOUS, AVEC LEUR TITRE POUR ANCRE. Le hub ne liait que la
+ * PREMIÈRE page de contenu de chaque app, sous l'ancre « Guide », qui ne dit
+ * rien de la page ; les suivantes, et celle du squelette, n'avaient aucun lien
+ * depuis l'origine. Groupés par catégorie, dans l'ordre du catalogue ; les
+ * sites hors catalogue viennent en dernier. Les pages anglaises, qui vont
+ * entrer aux plans de site, portent leur `lang` et leur `hreflang`.
+ */
+const groupesGuides = [
+  ...catsAvecApps.map(cat => ({
+    cle: cat,
+    libelle: libellesFr.categories?.[cat] ?? cat,
+    attribut: `data-i18n-cat="${echappe(cat)}"`,
+    entrees: FAMILY_APPS.filter(a => a.category === cat)
+      .slice()
+      .sort(ordreApps)
+      .flatMap(a =>
+        (pagesParApp.get(a.id) ?? []).map(p => ({ ...p, nom: a.name, site: a.appUrl }))
+      ),
+  })),
+  {
+    cle: 'coulisses',
+    libelle: 'Dans les coulisses',
+    attribut: 'data-i18n="coulisses"',
+    entrees: coulisses.flatMap(s =>
+      (pagesParSite.get(s.nom) ?? []).map(p => ({ ...p, nom: nomCourt(s.titre), site: s.base }))
+    ),
+  },
+].filter(g => g.entrees.length);
+const nbGuides = groupesGuides.reduce((n, g) => n + g.entrees.length, 0);
+const languesGuides = new Set(groupesGuides.flatMap(g => g.entrees.map(e => e.langue)));
+/** Une seule langue : aucune étiquette. Plusieurs : chaque guide dit la sienne. */
+const plusieursLangues = languesGuides.size > 1;
+
+const entreeGuide = e => {
+  const langue = e.langue === 'fr' ? '' : ` lang="${echappe(e.langue)}"`;
+  const etiquette = plusieursLangues
+    ? ` <span class="guide-langue">${echappe(e.langue.toUpperCase())}</span>`
+    : '';
+  return `              <li${langue}>
+                ${lienHorsShell(e.url, echappe(e.titre), ` class="guide-titre" hreflang="${echappe(e.langue)}"`)}${etiquette}
+                <span class="guide-meta">${lienHorsShell(e.site, echappe(e.nom), ' class="guide-app"')}</span>
+              </li>`;
+};
+
+const guidesHtml = nbGuides
+  ? `
+      <section class="guides" aria-labelledby="guides">
+        <h2 id="guides" data-i18n="guides">Guides pratiques</h2>
+        <p class="guides-intro" data-i18n="guidesIntro">Les pages de contenu des applications : méthodes pas à pas, règles et questions fréquentes.</p>
+        <div class="guides-grille">
+${groupesGuides
+  .map(
+    g => `          <section class="guides-groupe" aria-labelledby="guides-${g.cle}">
+            <h3 id="guides-${g.cle}" ${g.attribut}>${echappe(g.libelle)}</h3>
+            <ul class="guides-liste">
+${g.entrees.map(entreeGuide).join('\n')}
+            </ul>
+          </section>`
+  )
+  .join('\n')}
+        </div>
+      </section>`
+  : '';
 
 const description =
   `Les applications web installables de ${COMPTE} : ` +
@@ -590,20 +779,31 @@ const descriptionEn =
     .join(', ') +
   ', and more.';
 
-// Bing SEO/GEO : titre ≥ 50 car. Le H1 visible est la marque ; le <title> reste descriptif.
+// Bing SEO/GEO : titre ≥ 50 car. Le H1 visible est la marque ; le <title> reste
+// descriptif, et le reste une fois la page rendue (voir `appliqueTitre`).
 const titrePage = `Les applications de ${COMPTE} - PWA web installables hors magasin`;
 const titrePageEn = `${COMPTE}'s apps - installable PWAs, no app store`;
 
-const dateAfficheFr = new Intl.DateTimeFormat('fr-FR', {
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-}).format(new Date());
-const dateAfficheEn = new Intl.DateTimeFormat('en-GB', {
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-}).format(new Date());
+/**
+ * « Mis à jour le … » : la date du dernier VRAI changement de la page, pas celle
+ * du build de la nuit. La page est engendrée avec un jeton à sa place ; la date
+ * n'est posée qu'après le calcul de l'empreinte (voir « Dates de modification »
+ * plus bas).
+ */
+const majFr = `Mis à jour le ${JETONS.majFr}`;
+const majEn = `Updated ${JETONS.majEn}`;
+
+/**
+ * « Open source, hébergées en Europe. Aucun compte n'est nécessaire pour
+ * commencer. » : deux affirmations fausses ou invérifiables, retirées le
+ * 29/09/2026. Les pages sont servies par GitHub Pages, et miss-uwh comme
+ * mister-doc demandent un compte. Ne reste que ce qui se vérifie : le code est
+ * public, sous licence MIT ; les apps sont gratuites ; elles s'installent
+ * depuis le navigateur.
+ */
+const confianceFr =
+  "Open source et gratuites, installables sans passer par un magasin d'applications.";
+const confianceEn = 'Open source and free, installable without going through an app store.';
 
 const nbApps = FAMILY_APPS.length;
 const nbCats = catsAvecApps.length;
@@ -618,8 +818,7 @@ const i18nJson = JSON.stringify({
       "Des applications web à installer depuis le navigateur. Pas de magasin, et la plupart restent utilisables hors ligne.",
     chapeauPwa:
       "Des applications web, chacune ouverte en dehors de ce catalogue. Pas de magasin, et la plupart restent utilisables hors ligne.",
-    confiance:
-      "Open source, hébergées en Europe. Aucun compte n'est nécessaire pour commencer.",
+    confiance: confianceFr,
     coulisses: 'Dans les coulisses',
     source: 'Code source sur',
     sponsorBefore: 'Ces applications sont gratuites et open source.',
@@ -658,6 +857,11 @@ const i18nJson = JSON.stringify({
     licence: 'Licence MIT',
     nav: 'Catégories',
     guide: 'Guide',
+    guides: 'Guides pratiques',
+    guidesIntro:
+      'Les pages de contenu des applications : méthodes pas à pas, règles et questions fréquentes.',
+    aPropos: 'À propos',
+    presentation: 'Présentation',
     skip: 'Aller aux applications',
     installer: 'Installer le catalogue',
     projecteur: 'Coup de projecteur',
@@ -665,7 +869,8 @@ const i18nJson = JSON.stringify({
     maturiteFiltre: 'Maturité',
     compte: `${nbApps} applications · ${nbCats} catégories`,
     compteFiltre: '{n} sur ' + nbApps,
-    maj: `Mis à jour le ${dateAfficheFr}`,
+    maj: majFr,
+    // Le titre de la FENÊTRE de l'app installée, et d'elle seule.
     titleCourt: 'GuiiuG',
     categories: libellesFr.categories,
     maturity: libellesFr.maturity,
@@ -679,8 +884,7 @@ const i18nJson = JSON.stringify({
       'Web apps you install from the browser. No app store, and most keep working offline.',
     chapeauPwa:
       'Web apps, each one opened outside this catalogue. No app store, and most keep working offline.',
-    confiance:
-      'Open source, hosted in Europe. No account needed to get started.',
+    confiance: confianceEn,
     coulisses: 'Behind the scenes',
     source: 'Source code on',
     sponsorBefore: 'These apps are free and open source.',
@@ -719,6 +923,13 @@ const i18nJson = JSON.stringify({
     licence: 'MIT license',
     nav: 'Categories',
     guide: 'Guide (FR)',
+    guides: 'Practical guides',
+    // Tant que tous les guides sont en français, la phrase le dit.
+    guidesIntro: plusieursLangues || !languesGuides.has('fr')
+      ? 'Content pages from the apps: step-by-step methods, rules and FAQs.'
+      : 'Content pages from the apps: step-by-step methods, rules and FAQs, in French.',
+    aPropos: 'About (FR)',
+    presentation: 'Overview (FR)',
     skip: 'Skip to apps',
     installer: 'Install this catalogue',
     projecteur: 'Spotlight',
@@ -726,7 +937,7 @@ const i18nJson = JSON.stringify({
     maturiteFiltre: 'Maturity',
     compte: `${nbApps} apps · ${nbCats} categories`,
     compteFiltre: '{n} of ' + nbApps,
-    maj: `Updated ${dateAfficheEn}`,
+    maj: majEn,
     titleCourt: 'GuiiuG',
     categories: libellesEn.categories,
     maturity: libellesEn.maturity,
@@ -764,6 +975,7 @@ const html = `<!doctype html>
     <meta property="og:image:alt" content="Les applications de ${COMPTE} : leurs icônes, en mosaïque" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${titrePage}" />
+    <meta name="twitter:description" content="${echappe(description)}" />
     <meta name="twitter:image" content="${FAMILY_ORIGIN}/og-image.jpg?v=${IMAGE_EMPREINTE}" />
     <script type="application/ld+json">${jsonLd}</script>
     <script>
@@ -1592,6 +1804,65 @@ const html = `<!doctype html>
       .parcours .chip-link {
         text-decoration: none;
       }
+      .guides {
+        margin-top: 3rem;
+      }
+      .guides-intro {
+        margin: -0.35rem 0 1rem;
+        max-width: 42rem;
+        color: var(--doux);
+        font-size: 0.92rem;
+      }
+      .guides-grille {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fill, minmax(min(17rem, 100%), 1fr));
+      }
+      .guides-groupe {
+        min-width: 0;
+        padding: 0.9rem 1.05rem 1rem;
+        border: 1px solid var(--bord);
+        border-radius: 1rem;
+        background: var(--fond-carte);
+      }
+      .guides-groupe h3 {
+        margin: 0 0 0.65rem;
+        color: var(--doux);
+        font-size: 0.78rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      ul.guides-liste {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0.75rem;
+      }
+      .guide-titre {
+        font-weight: 600;
+        line-height: 1.35;
+        text-decoration: none;
+      }
+      .guide-titre:hover {
+        text-decoration: underline;
+      }
+      .guide-meta {
+        display: block;
+        margin-top: 0.1rem;
+        font-size: 0.82rem;
+      }
+      .guide-app {
+        color: var(--doux);
+      }
+      .guide-langue {
+        display: inline-block;
+        margin-left: 0.3rem;
+        padding: 0 0.35rem;
+        border: 1px solid var(--bord);
+        border-radius: 0.3rem;
+        color: var(--doux);
+        font-size: 0.68rem;
+        font-weight: 700;
+        vertical-align: 0.1em;
+      }
       footer {
         margin-top: 3rem;
         padding-top: 1.5rem;
@@ -1797,6 +2068,7 @@ const html = `<!doctype html>
       }
       @media (forced-colors: active) {
         .carte,
+        .guides-groupe,
         .chip,
         .sommaire a,
         .sponsor,
@@ -2004,7 +2276,7 @@ ${navCats}
         </p>
         <button type="button" class="chapeau-plus" id="chapeau-plus" data-i18n="enSavoirPlus" aria-expanded="false" aria-controls="chapeau">En savoir plus</button>
         <p class="confiance" data-i18n="confiance">
-          Open source, hébergées en Europe. Aucun compte n'est nécessaire pour commencer.
+          ${echappe(confianceFr)}
         </p>
         <button type="button" class="installer" id="installer" data-i18n="installer" hidden>Installer le catalogue</button>
       </div>
@@ -2027,6 +2299,7 @@ ${videSuggestions}
 
     <main id="catalogue">
 ${sections.join('\n\n')}
+${guidesHtml}
 ${
   coulisses.length
     ? `
@@ -2048,6 +2321,15 @@ ${coulisses.map(carteCoulisse).join('\n')}
 
     <footer>
       <p>
+        <a href="${FAMILY_ORIGIN}/a-propos.html" data-i18n="aPropos">À propos</a>${
+          nbGuides
+            ? `
+        ·
+        <a href="#guides" data-i18n="guides">Guides pratiques</a>`
+            : ''
+        }
+      </p>
+      <p>
         <span data-i18n="source">Code source sur</span>
         <a href="https://github.com/${COMPTE}">github.com/${COMPTE}</a>.
       </p>
@@ -2061,7 +2343,7 @@ ${coulisses.map(carteCoulisse).join('\n')}
         </a>
       </p>
       <p>
-        <span data-i18n="maj">Mis à jour le ${dateAfficheFr}</span>
+        <span data-i18n="maj">${majFr}</span>
         ·
         <a href="https://github.com/${COMPTE}/${SOI}/blob/main/LICENSE" data-i18n="licence">Licence MIT</a>
       </p>
@@ -2092,8 +2374,7 @@ ${coulisses.map(carteCoulisse).join('\n')}
         var deferredPrompt = null;
         var syncingUrl = false;
         var compteTimer = null;
-        var titleTimer = null;
-        var titleLong = '';
+        var ROBOT = ${MOTIF_ROBOT.toString()};
 
         function lang() {
           return root.lang === 'en' ? 'en' : 'fr';
@@ -2113,9 +2394,7 @@ ${coulisses.map(carteCoulisse).join('\n')}
           try { localStorage.setItem('hub-lang', l); } catch (e) {}
           var t = I18N[l];
           var pwa = isPwa();
-          titleLong = t.title;
-          document.title = titleLong;
-          scheduleShortTitle();
+          appliqueTitre();
           var desc = document.querySelector('meta[name="description"]');
           if (desc) desc.setAttribute('content', t.description);
           document.querySelectorAll('[data-i18n]').forEach(function (el) {
@@ -2146,6 +2425,9 @@ ${coulisses.map(carteCoulisse).join('\n')}
           });
           document.querySelectorAll('[data-fr][data-en]').forEach(function (el) {
             el.textContent = el.getAttribute(l === 'en' ? 'data-en' : 'data-fr');
+          });
+          document.querySelectorAll('img[data-alt-fr][data-alt-en]').forEach(function (img) {
+            img.setAttribute('alt', img.getAttribute(l === 'en' ? 'data-alt-en' : 'data-alt-fr'));
           });
           document.querySelectorAll('[data-set-lang]').forEach(function (btn) {
             btn.setAttribute('aria-pressed', btn.getAttribute('data-set-lang') === l ? 'true' : 'false');
@@ -2182,12 +2464,23 @@ ${coulisses.map(carteCoulisse).join('\n')}
           }
         }
 
-        function scheduleShortTitle() {
-          if (titleTimer) clearTimeout(titleTimer);
-          titleTimer = setTimeout(function () {
-            var t = I18N[lang()];
-            if (t.titleCourt) document.title = t.titleCourt;
-          }, 4000);
+        // LE TITRE LONG RESTE CELUI DE LA PAGE. Jusqu'au 29/09/2026, il cédait
+        // la place à « GuiiuG » au bout de 4 s, dans tout navigateur : Bing,
+        // qui indexe la page RENDUE, la classait en erreur « Title too short ».
+        // Le titre court ne sert qu'à la fenêtre de l'app installée (barre de
+        // titre, sélecteur de tâches), et jamais devant un robot, même rendu
+        // dans un mode inhabituel.
+        function estInstallee() {
+          return (
+            window.matchMedia('(display-mode: standalone)').matches ||
+            window.navigator.standalone === true
+          );
+        }
+
+        function appliqueTitre() {
+          var t = I18N[lang()];
+          var robot = ROBOT.test(navigator.userAgent || '');
+          document.title = t.titleCourt && estInstallee() && !robot ? t.titleCourt : t.title;
         }
 
         function writeUrl() {
@@ -2383,6 +2676,9 @@ ${coulisses.map(carteCoulisse).join('\n')}
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
           if (theme() === 'system') applyTheme('system');
         });
+        // Installée depuis l'onglet, la page passe dans la fenêtre de l'app.
+        var modeInstalle = window.matchMedia('(display-mode: standalone)');
+        if (modeInstalle.addEventListener) modeInstalle.addEventListener('change', appliqueTitre);
 
         if (filtre) filtre.addEventListener('input', applyFilters);
         document.querySelectorAll('[data-maturity-filter]').forEach(function (btn) {
@@ -2611,14 +2907,14 @@ ${coulisses.map(carteCoulisse).join('\n')}
         }
       })();
     </script>
-    </script>
   </body>
 </html>
 `;
 
 // Manifest + service worker : sans eux, Chrome Android n'offre pas
-// « Installer l'application ». Le worker ne fait que du réseau d'abord —
-// le hub reste une page générée, pas une app hors-ligne riche.
+// « Installer l'application ». Le worker ne fait que du réseau d'abord, et
+// SEULEMENT pour le hub : sa portée « / » couvre aussi les apps, auxquelles il
+// ne doit pas toucher (voir scripts/hub-sw.mjs).
 const manifeste = {
   id: `${FAMILY_ORIGIN}/`,
   name: `Les applications de ${COMPTE}`,
@@ -2653,53 +2949,47 @@ const manifeste = {
   ],
 };
 
-const sw = `/* Hub ${COMPTE} — réseau d'abord, repli offline dédié. */
-const CACHE = 'hub-v4';
-const OFFLINE = '${FAMILY_ORIGIN}/offline.html';
-const PRECACHE = [
-  '${FAMILY_ORIGIN}/',
-  '${FAMILY_ORIGIN}/index.html',
-  OFFLINE,
-  '${FAMILY_ORIGIN}/manifest.webmanifest',
-  '${FAMILY_ORIGIN}/icon-192.png',
-  '${FAMILY_ORIGIN}/icon-512.png',${
-    featuredId && imageParApp.has(featuredId)
-      ? `
-  '${FAMILY_ORIGIN}/previews/${featuredId}.jpg',
-  '${FAMILY_ORIGIN}/previews/${featuredId}.webp',`
-      : ''
-  }
+/**
+ * Les fichiers de premier niveau que sert le hub : les SEULS, avec
+ * `/previews/…`, auxquels son worker réponde. Tout ce qui est sous `/<app>/`
+ * appartient à une app, qui a son propre worker. `robots.txt`, les plans de
+ * site, `seo-state.json` et les fichiers de vérification restent hors liste :
+ * ils servent aux robots, pas aux pages.
+ */
+const CHEMINS_DU_HUB = [
+  '/',
+  '/index.html',
+  '/offline.html',
+  '/404.html',
+  '/a-propos.html',
+  ...bureau.map(b => b.chemin),
+  '/manifest.webmanifest',
+  '/og-image.jpg',
+  '/favicon.ico',
+  '/favicon.svg',
+  '/favicon.png',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png',
 ];
 
-self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
+const sw = serviceWorkerHub({
+  compte: COMPTE,
+  chemins: CHEMINS_DU_HUB,
+  essentiels: [
+    '/',
+    '/index.html',
+    '/offline.html',
+    '/manifest.webmanifest',
+    '/icon-192.png',
+    '/icon-512.png',
+  ],
+  // La miniature du projecteur, si elle existe ; sans sharp, pas de WebP.
+  extras:
+    featuredId && imageParApp.has(featuredId)
+      ? [`/previews/${featuredId}.jpg`, `/previews/${featuredId}.webp`]
+      : [],
 });
-
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
-  );
-});
-
-self.addEventListener('fetch', event => {
-  const req = event.request;
-  if (req.method !== 'GET') return;
-  const nav = req.mode === 'navigate';
-  event.respondWith(
-    fetch(req)
-      .then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
-        return res;
-      })
-      .catch(() =>
-        caches.match(req).then(r => r || (nav ? caches.match(OFFLINE) : caches.match('${FAMILY_ORIGIN}/')))
-      )
-  );
-});
-`;
 
 const offlineHtml = `<!doctype html>
 <html lang="fr">
@@ -2735,6 +3025,110 @@ const offlineHtml = `<!doctype html>
 </html>
 `;
 
+// ---------------------------------------------------------------------------
+// Pages statiques du hub — sans script, voir scripts/pages-hub.mjs
+// ---------------------------------------------------------------------------
+
+const commun = {
+  origine: FAMILY_ORIGIN,
+  compte: COMPTE,
+  imagePartage: {
+    url: `${FAMILY_ORIGIN}/og-image.jpg?v=${IMAGE_EMPREINTE}`,
+    alt: `Les applications de ${COMPTE} : leurs icônes, en mosaïque`,
+  },
+};
+/** Où mène une app : son site, ou sa page du hub pour une app de bureau. */
+const adresseDe = app =>
+  surOrigine(app.appUrl)
+    ? app.appUrl
+    : pageDeBureau.has(app.id)
+      ? `${FAMILY_ORIGIN}${pageDeBureau.get(app.id).chemin}`
+      : app.appUrl;
+
+const aProposHtml = pageAPropos({
+  ...commun,
+  apps: FAMILY_APPS.map(a => ({ ...a, adresse: adresseDe(a) })),
+  avecIssues,
+  sponsorUrl: SPONSOR_URL,
+});
+// Une app née au catalogue après le relevé : la page la dit « pas encore
+// relevée » plutôt que de lui prêter des pratiques ; la CI le signale.
+const aRelever = appsNonRelevees(FAMILY_APPS);
+if (aRelever.length) {
+  console.log(
+    `::warning::À propos : ${aRelever.map(a => a.id).join(', ')} absente(s) du relevé des pratiques de données (scripts/page-a-propos.mjs, RELEVE).`
+  );
+}
+const pagesBureauHtml = bureau.map(b => ({
+  chemin: b.chemin,
+  texte: PAGES_BUREAU[b.app.id]({ ...commun, app: b.app, version: b.version, avecIssues }),
+}));
+const html404 = page404({
+  ...commun,
+  apps: FAMILY_APPS.map(a => ({ nom: a.name, url: adresseDe(a) })),
+});
+
+// ---------------------------------------------------------------------------
+// Dates de modification — l'empreinte du contenu, pas le jour du build
+// ---------------------------------------------------------------------------
+
+/**
+ * Les pages du plan de site du hub, encore porteuses de leurs JETONS de date :
+ * leur empreinte ne dépend donc que de leur contenu. `404.html` n'en est pas :
+ * elle porte `noindex`, et un plan de site ne liste que des pages à indexer.
+ */
+const pagesDuPlan = [
+  { chemin: '/', fichier: 'index.html', texte: html },
+  { chemin: '/a-propos.html', fichier: 'a-propos.html', texte: aProposHtml },
+  ...pagesBureauHtml.map(p => ({ chemin: p.chemin, fichier: p.chemin.slice(1), texte: p.texte })),
+];
+const aujourdhui = new Date().toISOString().slice(0, 10);
+const { etat: etatPrecedent, statut: statutEtat } = await lireEtatEnLigne(
+  `${FAMILY_ORIGIN}/seo-state.json`
+);
+if (statutEtat === 'injoignable') {
+  console.log(
+    "::warning::seo-state.json injoignable : les pages du hub sont datées d'aujourd'hui."
+  );
+}
+const { etat: etatSeo, modifiees } = datesDeModification(
+  etatPrecedent,
+  pagesDuPlan.map(p => ({ url: `${FAMILY_ORIGIN}${p.chemin}`, empreinte: empreinte(p.texte) })),
+  aujourdhui
+);
+const lastmodDe = chemin => etatSeo.pages[`${FAMILY_ORIGIN}${chemin}`].lastmod;
+console.log(
+  `seo-state.json ${statutEtat === 'lu' ? 'relu en ligne' : statutEtat} ; ` +
+    (modifiees.length
+      ? `${modifiees.length} page(s) du hub modifiée(s) : ${modifiees.join(', ')}`
+      : 'aucune page du hub modifiée')
+);
+
+const planHub = planDeSite(
+  pagesDuPlan.map(p => ({ loc: `${FAMILY_ORIGIN}${p.chemin}`, lastmod: lastmodDe(p.chemin) }))
+);
+const plansDuParc = sites
+  .filter(s => s.plan)
+  .sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+const indexPlans = indexDePlans([
+  {
+    loc: `${FAMILY_ORIGIN}/sitemap-hub.xml`,
+    lastmod: dernierLastmod(pagesDuPlan.map(p => ({ lastmod: lastmodDe(p.chemin) }))),
+  },
+  ...plansDuParc.map(s => ({
+    loc: `${s.base}sitemap.xml`,
+    lastmod: lastmodParPlan.get(s.base) ?? null,
+  })),
+]);
+
+/** Les pages, datées : le jeton cède la place au jour de leur dernier changement. */
+const pagesDatees = pagesDuPlan.map(p => ({ ...p, texte: dater(p.texte, lastmodDe(p.chemin)) }));
+for (const { fichier, texte } of [...pagesDatees, { fichier: '404.html', texte: html404 }]) {
+  if (Object.values(JETONS).some(j => texte.includes(j))) {
+    throw new Error(`${fichier} : un jeton de date n'a pas été remplacé`);
+  }
+}
+
 mkdirSync(SORTIE, { recursive: true });
 mkdirSync(join(SORTIE, 'previews'), { recursive: true });
 
@@ -2764,7 +3158,10 @@ for (const [id, url] of imageParApp) {
 }
 console.log(`Previews : ${previewsOk}/${imageParApp.size}`);
 
-writeFileSync(join(SORTIE, 'index.html'), html, 'utf8');
+for (const { fichier, texte } of pagesDatees) writeFileSync(join(SORTIE, fichier), texte, 'utf8');
+// GitHub Pages sert `/404.html` pour toute URL inconnue sous la racine, avec le
+// statut 404 ; `noindex` en plus, par principe.
+writeFileSync(join(SORTIE, '404.html'), html404, 'utf8');
 writeFileSync(join(SORTIE, 'offline.html'), offlineHtml, 'utf8');
 writeFileSync(join(SORTIE, 'robots.txt'), robots, 'utf8');
 writeFileSync(
@@ -2773,7 +3170,11 @@ writeFileSync(
   'utf8'
 );
 writeFileSync(join(SORTIE, 'sw.js'), sw, 'utf8');
-writeFileSync(join(SORTIE, 'sitemap.xml'), sitemap, 'utf8');
+// `/sitemap.xml` est l'INDEX ; les URL du hub sont dans `/sitemap-hub.xml`.
+writeFileSync(join(SORTIE, 'sitemap.xml'), indexPlans, 'utf8');
+writeFileSync(join(SORTIE, 'sitemap-hub.xml'), planHub, 'utf8');
+// Relu en ligne à la construction suivante : c'est lui qui garde les dates.
+writeFileSync(join(SORTIE, 'seo-state.json'), JSON.stringify(etatSeo, null, 2) + '\n', 'utf8');
 // Le contenu exact que Google attend, au caractère près.
 writeFileSync(
   join(SORTIE, VERIFICATION_GOOGLE),
@@ -2817,10 +3218,20 @@ copyFileSync(
   join(SORTIE, 'apple-touch-icon.png')
 );
 
+// CE QUE LE JOB « PUBLIER » SIGNALERA À INDEXNOW : les pages du hub dont le
+// contenu a changé à cette construction, et elles seules (scripts/indexnow.mjs).
+if (process.env.GITHUB_OUTPUT) {
+  appendFileSync(process.env.GITHUB_OUTPUT, `urls-modifiees=${JSON.stringify(modifiees)}\n`);
+}
+
 console.log(
   `\nÉcrit dans ${SORTIE}/ : index.html (${FAMILY_APPS.length} applications en ` +
-    `${sections.length} catégories, ${coulisses.length} en coulisses), ` +
-    `robots.txt (${sites.filter(s => s.plan).length + 1} plans de site), sitemap.xml, ` +
+    `${sections.length} catégories, ${coulisses.length} en coulisses, ${nbGuides} guides), ` +
+    `${pagesDuPlan
+      .slice(1)
+      .map(p => p.fichier)
+      .join(', ')}, 404.html, robots.txt, sitemap.xml (index de ` +
+    `${plansDuParc.length + 1} plans), sitemap-hub.xml (${pagesDuPlan.length} URL), seo-state.json, ` +
     `${VERIFICATION_GOOGLE}, BingSiteAuth.xml, clé IndexNow, og-image.jpg, ` +
     `previews/ (${previewsOk}), offline.html, manifest.webmanifest, sw.js, icônes PWA`
 );

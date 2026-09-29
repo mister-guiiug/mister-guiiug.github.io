@@ -1,16 +1,22 @@
 /**
- * Signale à IndexNow les pages du parc qui viennent de changer.
+ * Signale à IndexNow les pages DU HUB qui viennent de changer.
  *
  * Joué APRÈS la publication (`pages.yml`, job « Publier ») : la clé doit être
  * en ligne pour que le moteur la vérifie.
  *
  * QUOI SIGNALER. IndexNow demande les URL ajoutées ou modifiées, pas la liste
- * entière chaque nuit — un envoi répété de pages inchangées est ignoré, voire
- * déclassé. On lit donc les plans de site que déclare le `robots.txt` de la
- * racine, et on ne retient que les URL dont le `lastmod` date d'hier ou
- * d'aujourd'hui (UTC). Depuis le socle 6.10.0, chaque app date son plan de
- * site au jour de son build : un déploiement d'app devient ainsi un
- * signalement, sans rien changer à son dépôt.
+ * entière à chaque publication : un envoi répété de pages inchangées est
+ * ignoré, voire déclassé. Jusqu'au 29/09/2026, ce script relisait les plans de
+ * site de TOUT le parc et retenait chaque URL datée d'hier ou d'aujourd'hui. Or
+ * le socle datait chaque URL du jour de son build, les apps sont redéployées
+ * presque chaque jour, et la racine datait `/` chaque nuit : les 41 URL du parc
+ * partaient à chaque publication, quinze fois le 27/09. Désormais :
+ *   - le hub ne signale que SES pages, et parmi elles celles dont le contenu a
+ *     changé à cette construction : `build-site.mjs` compare leur empreinte à
+ *     celle de la publication précédente (`seo-state.json`) et passe la liste
+ *     au job « Publier » par la sortie `urls-modifiees`, reçue ici dans la
+ *     variable URLS_MODIFIEES (un tableau JSON) ;
+ *   - chaque app signale les siennes à son propre déploiement (socle 6.19.0).
  *
  * NE JAMAIS SIGNALER UNE URL QUI RÉPOND 4xx. Bing (et les autres) suivent
  * IndexNow immédiatement : si Pages / Fastly sert encore un 404 en cache —
@@ -18,22 +24,21 @@
  * « Page Fetch Failed » et laisse l'URL en « Discovered but not crawled ».
  * On attend donc que la clé et chaque URL répondent 200 avant d'envoyer.
  *
- * `--tout` signale toutes les URL (premier envoi, ou reprise après panne) ;
- * `--a-blanc` affiche sans envoyer.
+ * `--tout` signale toutes les URL du plan de site du hub (premier envoi, ou
+ * reprise après panne) ; `--a-blanc` affiche sans envoyer.
  *
  * ÉCHOUER NE CASSE RIEN : le site est déjà publié. Le code de sortie dit
- * seulement si le moteur a accepté.
+ * seulement si le moteur a accepté ; « rien à signaler » n'est pas un échec.
  */
 import { INDEXNOW_CLE } from './indexnow-cle.mjs';
+import { urlsDuPlan } from './seo-hub.mjs';
 
 const HOTE = 'mister-guiiug.github.io';
 const ORIGINE = `https://${HOTE}`;
 const CLE_URL = `${ORIGINE}/${INDEXNOW_CLE}.txt`;
+const PLAN_DU_HUB = `${ORIGINE}/sitemap-hub.xml`;
 const tout = process.argv.includes('--tout');
 const aBlanc = process.argv.includes('--a-blanc');
-
-const jour = d => d.toISOString().slice(0, 10);
-const hier = jour(new Date(Date.now() - 24 * 3600 * 1000));
 
 async function texte(url) {
   const r = await fetch(url);
@@ -70,50 +75,67 @@ async function attendre200(url, { essais = 24, pauseMs = 10_000 } = {}) {
   return false;
 }
 
-// 1. La clé est-elle en ligne ? Sans elle, le moteur refuserait tout.
-//    On attend : elle vient d'être déployée avec le reste du site.
-console.log('Vérification de la clé IndexNow…');
-if (!(await attendre200(CLE_URL))) {
-  console.error(`La clé n'est pas servie à ${CLE_URL} : rien n'est signalé.`);
-  process.exitCode = 1;
+/** Une page du HUB : sur l'origine, et au premier niveau (`/`, `/a-propos.html`). */
+const estDuHub = u => {
+  try {
+    const { origin, pathname } = new URL(u);
+    return origin === ORIGINE && /^\/[^/]*$/.test(pathname);
+  } catch {
+    return false;
+  }
+};
+
+/** Les URL à signaler : toutes celles du plan du hub, ou celles que la construction a vues changer. */
+async function candidates() {
+  if (tout) {
+    if (!(await attendre200(PLAN_DU_HUB, { essais: 12 }))) {
+      throw new Error(`${PLAN_DU_HUB} ne répond pas 200.`);
+    }
+    return urlsDuPlan(await texte(PLAN_DU_HUB)).map(u => u.loc);
+  }
+  let liste = [];
+  try {
+    liste = JSON.parse(process.env.URLS_MODIFIEES || '[]');
+  } catch {
+    console.error(`URLS_MODIFIEES illisible : ${process.env.URLS_MODIFIEES}`);
+  }
+  return Array.isArray(liste) ? liste.filter(u => typeof u === 'string') : [];
+}
+
+const urls = [...new Set(await candidates())];
+const horsHub = urls.filter(u => !estDuHub(u));
+for (const u of horsHub) console.log(`  ✗ hors du hub, omise : ${u}`);
+const aSignaler = urls.filter(estDuHub);
+console.log(
+  `${aSignaler.length} URL du hub ${tout ? '(toutes, --tout)' : 'modifiées à cette construction'}.`
+);
+
+if (!aSignaler.length) {
+  // Le cas ordinaire d'une nuit sans changement : pas un échec.
+  console.log('Rien à signaler : aucune page du hub n’a changé.');
 } else {
-  const servie = (await texte(CLE_URL)).trim();
-  if (servie !== INDEXNOW_CLE) {
-    console.error(
-      `La clé servie à ${CLE_URL} ne correspond pas : rien n'est signalé.`
-    );
+  // 1. La clé est-elle en ligne ? Sans elle, le moteur refuserait tout.
+  //    On attend : elle vient d'être déployée avec le reste du site.
+  console.log('Vérification de la clé IndexNow…');
+  if (!(await attendre200(CLE_URL))) {
+    console.error(`La clé n'est pas servie à ${CLE_URL} : rien n'est signalé.`);
+    process.exitCode = 1;
+  } else if ((await texte(CLE_URL)).trim() !== INDEXNOW_CLE) {
+    console.error(`La clé servie à ${CLE_URL} ne correspond pas : rien n'est signalé.`);
     process.exitCode = 1;
   } else {
-    // 2. Les URL, depuis les plans de site déclarés à la racine.
-    const robots = await texte(`${ORIGINE}/robots.txt`);
-    const plans = [...robots.matchAll(/^Sitemap:\s*(\S+)$/gm)].map(m => m[1]);
-    const urls = [];
-    for (const plan of plans) {
-      const xml = await texte(plan).catch(() => '');
-      for (const [, bloc] of xml.matchAll(/<url>([\s\S]*?)<\/url>/g)) {
-        const loc = /<loc>([^<]+)<\/loc>/.exec(bloc)?.[1]?.trim();
-        const lastmod = /<lastmod>([^<]+)<\/lastmod>/.exec(bloc)?.[1]?.trim();
-        if (!loc?.startsWith(`${ORIGINE}/`)) continue;
-        if (tout || (lastmod && lastmod.slice(0, 10) >= hier)) urls.push(loc);
-      }
-    }
-    const candidates = [...new Set(urls)];
-    console.log(
-      `${plans.length} plans de site lus ; ${candidates.length} URL ${tout ? '(toutes)' : `modifiées depuis le ${hier}`}.`
-    );
-
-    // 3. Ne garder que celles qui répondent 200 — sinon Bing enregistre un 4xx.
+    // 2. Ne garder que celles qui répondent 200 — sinon Bing enregistre un 4xx.
+    //    Une page neuve peut rester quelques minutes en 404 dans le cache du CDN.
     const liste = [];
-    for (const u of candidates) {
-      const code = await statut(u, 3);
-      if (code === 200) {
+    for (const u of aSignaler) {
+      if (await attendre200(u, { essais: 12 })) {
         liste.push(u);
         console.log(`  ✓ ${u}`);
       } else {
-        console.log(`  ✗ omit (${code}) ${u}`);
+        console.log(`  ✗ omise (pas de 200) ${u}`);
       }
     }
-    console.log(`${liste.length}/${candidates.length} URL joignables en 200.`);
+    console.log(`${liste.length}/${aSignaler.length} URL joignables en 200.`);
 
     if (!liste.length) {
       console.log('Rien de joignable à signaler.');
@@ -121,7 +143,7 @@ if (!(await attendre200(CLE_URL))) {
     } else if (aBlanc) {
       console.log('(à blanc : rien envoyé)');
     } else {
-      // 4. Un seul envoi groupé (jusqu'à 10 000 URL).
+      // 3. Un seul envoi groupé (jusqu'à 10 000 URL).
       const r = await fetch('https://api.indexnow.org/indexnow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json; charset=utf-8' },
