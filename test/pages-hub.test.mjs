@@ -103,6 +103,41 @@ test('À propos : page statique, indexable, JSON-LD AboutPage relié à #org et 
   assert.match(html, /Toutes les applications web sauf Mister Doc affichent un bandeau/);
 });
 
+test('À propos : le choix de mesure se retire depuis chaque application, plus en effaçant tout', () => {
+  // Jusqu'au 30/09/2026, la page disait vrai : on ne pouvait revoir son choix
+  // qu'en effaçant les données du site, et avec elles celles de l'application.
+  // Chaque application qui mesure porte désormais la section du socle.
+  const html = pageAPropos({
+    origine: ORIGINE,
+    compte: COMPTE,
+    imagePartage: IMAGE,
+    apps: APPS,
+    avecIssues: new Set(),
+    sponsorUrl: 'https://buymeacoffee.com/mister.guiiug',
+  });
+  assert.match(
+    html,
+    /chacune affiche, dans ses réglages ou l’écran qui en tient lieu, une section « Mesure d’audience »/
+  );
+  assert.ok(
+    html.includes(`relevé sur les sites publiés le ${RELEVE.dateRetrait}`),
+    'le retrait porte la date de SON relevé, pas celle du 29/09'
+  );
+  assert.match(html, /« Retirer mon consentement » arrête la mesure d’un clic/);
+  assert.match(html, /« Modifier mon choix » la repose/);
+  assert.match(html, /seulement après votre accord, qui se retire d’un clic/);
+  assert.doesNotMatch(html, /pour le revoir plus tôt, il faut effacer/);
+});
+
+test('le relevé du retrait ne nomme que des applications qui mesurent', () => {
+  const mesurent = new Set(RELEVE.posthog);
+  assert.deepEqual(
+    RELEVE.retraitConsentement.filter(id => !mesurent.has(id)),
+    [],
+    'un retrait sans mesure ne veut rien dire'
+  );
+});
+
 test('les affirmations retirées ne reviennent pas', () => {
   const pages = [
     pageAPropos({
