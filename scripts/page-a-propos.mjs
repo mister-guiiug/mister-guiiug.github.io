@@ -83,6 +83,35 @@ export const RELEVE = {
     'mister-qowa',
     'mister-settle',
   ],
+  /**
+   * Le choix se change depuis l'application : une section « Mesure
+   * d'audience » (`ConsentSection` du socle, 6.20) dans ses réglages ou
+   * l'écran qui en tient lieu — « Retirer mon consentement » si l'on a
+   * accepté, « Modifier mon choix » si l'on a refusé. Relevé SUR LES SITES
+   * PUBLIÉS, pas dans les PR : c'est ce qu'un visiteur trouve. Sa date est à
+   * part, `dateRetrait` : ce relevé-là n'est pas celui du 29/09/2026.
+   */
+  dateRetrait: '30 septembre 2026',
+  retraitConsentement: [
+    'miss-badminton',
+    'miss-carbook',
+    'miss-contraction',
+    'miss-dice',
+    'miss-genius',
+    'miss-lookhouse',
+    'miss-supaboss',
+    'miss-supatool',
+    'miss-ticket-pwa',
+    'miss-uwh',
+    'mister-cim10',
+    'mister-family-map',
+    'mister-footcoach',
+    'mister-miss-koh',
+    'mister-molkky',
+    'mister-puzzle',
+    'mister-qowa',
+    'mister-settle',
+  ],
   /** DSN Sentry posé au déploiement : Sentry démarre à l'ouverture. */
   sentry: [
     'miss-badminton',
@@ -167,6 +196,23 @@ export function pageAPropos({ origine, compte, imagePartage, apps, avecIssues, s
   const nbWeb = apps.filter(a => a.platform !== 'desktop').length;
   const nbBureau = apps.filter(a => a.platform === 'desktop').length;
   const nonRelevees = appsNonRelevees(apps);
+
+  // Revenir sur son choix : ce que la page dit dépend du relevé, application
+  // par application. Tant qu'une application qui mesure n'offre pas le retrait,
+  // elle garde la seule voie qui existe chez elle : effacer les données du site.
+  const avecRetrait = choisir(RELEVE.retraitConsentement);
+  const sansRetrait = RELEVE.posthog.filter(id => !RELEVE.retraitConsentement.includes(id));
+  const retraitPartout = avecRetrait.length > 0 && choisir(sansRetrait).length === 0;
+  const effacer = 'effacer les données du site dans le navigateur, ce qui efface aussi celles que l’application garde sur l’appareil';
+  const revoirSonChoix = avecRetrait.length
+    ? `Votre choix est gardé treize mois, et se change à tout moment : ${
+        retraitPartout
+          ? 'chacune affiche, dans ses réglages ou l’écran qui en tient lieu,'
+          : `${noms(RELEVE.retraitConsentement)} affichent, dans leurs réglages ou l’écran qui en tient lieu,`
+      } une section « Mesure d’audience » (relevé sur les sites publiés le ${RELEVE.dateRetrait}). Si vous avez accepté, « Retirer mon consentement » arrête la mesure d’un clic, sans vous reposer la question ; si vous avez refusé, « Modifier mon choix » la repose.${
+        retraitPartout ? '' : ` Pour ${noms(sansRetrait)}, il faut encore ${effacer}.`
+      }`
+    : `Votre choix est gardé treize mois ; pour le revoir plus tôt, il faut ${effacer}.`;
 
   const { local, supabase, firebase, outils, bureau } = RELEVE.stockage;
   const sections = [];
@@ -265,7 +311,7 @@ export function pageAPropos({ origine, compte, imagePartage, apps, avecIssues, s
           <dt>Prix</dt>
           <dd>gratuit, sans publicité ni achat intégré</dd>
           <dt>Mesure d’audience</dt>
-          <dd>PostHog, seulement après votre accord</dd>
+          <dd>PostHog, seulement après votre accord${retraitPartout ? ', qui se retire d’un clic' : ''}</dd>
           <dt>Erreurs</dt>
           <dd>Sentry, dès l’ouverture</dd>
           <dt>Pages servies par</dt>
@@ -302,7 +348,7 @@ ${sections.join('\n')}${
       <p>${parmiLeWeb(RELEVE.posthog)} affichent un bandeau de consentement : tant que vous n’avez pas choisi « Accepter », rien n’est chargé ni envoyé. Si vous acceptez, <a href="https://posthog.com/">PostHog</a>, sur ses serveurs européens, reçoit les pages vues et quelques événements d’usage (une partie lancée, un export…)${aussi(
         ['miss-contraction'],
         ', et, pour Miss Contraction, des mesures de vitesse de la page'
-      )}, sans cookie : son identifiant reste dans le stockage du navigateur. Ni enregistrement des sessions, ni capture automatique des clics. Votre choix est gardé treize mois ; pour le revoir plus tôt, il faut effacer les données du site dans le navigateur, ce qui efface aussi celles que l’application garde sur l’appareil.</p>
+      )}, sans cookie : son identifiant reste dans le stockage du navigateur. Ni enregistrement des sessions, ni capture automatique des clics. ${revoirSonChoix}</p>
 
       <h3>Remontée d’erreurs : Sentry, dès l’ouverture</h3>
       <p>${parmiLeWeb(RELEVE.sentry)} démarrent <a href="https://sentry.io/">Sentry</a> à l’ouverture, sans consentement préalable, sur ses serveurs situés en Allemagne. Quand une erreur survient, Sentry reçoit un rapport technique : le message et la pile d’appels, la page, le navigateur, et le fil des dernières actions (clics, navigation, requêtes réseau avec leur adresse, messages de la console) ; comme tout envoi, il porte l’adresse IP du navigateur.${aussi(
