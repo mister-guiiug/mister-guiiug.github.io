@@ -112,6 +112,35 @@ export const RELEVE = {
     'mister-qowa',
     'mister-settle',
   ],
+  /**
+   * « Retirer mon consentement » efface aussi l'identifiant de visite que
+   * PostHog garde dans le navigateur : `opt_out_persistence_by_default`, posé
+   * par le socle depuis la 6.21.1. Avant, l'identifiant restait après le
+   * retrait, et un accord redonné à une visite suivante le reprenait. Relevé
+   * SUR LES SITES PUBLIÉS : l'option est dans le code que sert chaque site
+   * (les morceaux de son précache). Sa date est à part, `dateOubli`.
+   */
+  dateOubli: '1er octobre 2026',
+  oubliAuRetrait: [
+    'miss-badminton',
+    'miss-carbook',
+    'miss-contraction',
+    'miss-dice',
+    'miss-genius',
+    'miss-lookhouse',
+    'miss-supaboss',
+    'miss-supatool',
+    'miss-ticket-pwa',
+    'miss-uwh',
+    'mister-cim10',
+    'mister-family-map',
+    'mister-footcoach',
+    'mister-miss-koh',
+    'mister-molkky',
+    'mister-puzzle',
+    'mister-qowa',
+    'mister-settle',
+  ],
   /** DSN Sentry posé au déploiement : Sentry démarre à l'ouverture. */
   sentry: [
     'miss-badminton',
@@ -204,12 +233,23 @@ export function pageAPropos({ origine, compte, imagePartage, apps, avecIssues, s
   const sansRetrait = RELEVE.posthog.filter(id => !RELEVE.retraitConsentement.includes(id));
   const retraitPartout = avecRetrait.length > 0 && choisir(sansRetrait).length === 0;
   const effacer = 'effacer les données du site dans le navigateur, ce qui efface aussi celles que l’application garde sur l’appareil';
+  // Effacer l'identifiant au retrait suppose un retrait : le relevé ne compte
+  // que les applications qui l'offrent, et la phrase nomme celles qu'il a vues
+  // tant qu'il ne les couvre pas toutes.
+  const avecOubli = choisir(RELEVE.oubliAuRetrait.filter(id => RELEVE.retraitConsentement.includes(id)));
+  const oubli = avecOubli.length
+    ? ` ${
+        avecOubli.length === avecRetrait.length
+          ? 'Le retrait'
+          : `Chez ${enumere(avecOubli.map(a => echappeHtml(a.name)))}, le retrait`
+      } efface aussi du navigateur l’identifiant de visite de PostHog (relevé sur les sites publiés le ${RELEVE.dateOubli}).`
+    : '';
   const revoirSonChoix = avecRetrait.length
     ? `Votre choix est gardé treize mois, et se change à tout moment : ${
         retraitPartout
           ? 'chacune affiche, dans ses réglages ou l’écran qui en tient lieu,'
           : `${noms(RELEVE.retraitConsentement)} affichent, dans leurs réglages ou l’écran qui en tient lieu,`
-      } une section « Mesure d’audience » (relevé sur les sites publiés le ${RELEVE.dateRetrait}). Si vous avez accepté, « Retirer mon consentement » arrête la mesure d’un clic, sans vous reposer la question ; si vous avez refusé, « Modifier mon choix » la repose.${
+      } une section « Mesure d’audience » (relevé sur les sites publiés le ${RELEVE.dateRetrait}). Si vous avez accepté, « Retirer mon consentement » arrête la mesure d’un clic, sans vous reposer la question ; si vous avez refusé, « Modifier mon choix » la repose.${oubli}${
         retraitPartout ? '' : ` Pour ${noms(sansRetrait)}, il faut encore ${effacer}.`
       }`
     : `Votre choix est gardé treize mois ; pour le revoir plus tôt, il faut ${effacer}.`;

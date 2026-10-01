@@ -127,6 +127,50 @@ test('À propos : le choix de mesure se retire depuis chaque application, plus e
   assert.match(html, /« Modifier mon choix » la repose/);
   assert.match(html, /seulement après votre accord, qui se retire d’un clic/);
   assert.doesNotMatch(html, /pour le revoir plus tôt, il faut effacer/);
+  // Depuis le relevé du 01/10/2026, sur chaque site qui offre le retrait.
+  assert.ok(
+    html.includes(
+      `Le retrait efface aussi du navigateur l’identifiant de visite de PostHog (relevé sur les sites publiés le ${RELEVE.dateOubli})`
+    )
+  );
+});
+
+test('À propos : l’identifiant effacé au retrait ne se dit que là où le relevé l’a vu', () => {
+  // Le socle 6.21.1 efface l'identifiant de PostHog au retrait. La page ne le
+  // dit qu'au vu du code que sert chaque site, et nomme les applications tant
+  // que le relevé ne les couvre pas toutes.
+  const rendre = () =>
+    pageAPropos({
+      origine: ORIGINE,
+      compte: COMPTE,
+      imagePartage: IMAGE,
+      apps: APPS,
+      avecIssues: new Set(),
+      sponsorUrl: 'https://buymeacoffee.com/mister.guiiug',
+    });
+  const phrase = `efface aussi du navigateur l’identifiant de visite de PostHog (relevé sur les sites publiés le ${RELEVE.dateOubli})`;
+  const releve = RELEVE.oubliAuRetrait;
+  try {
+    RELEVE.oubliAuRetrait = [];
+    assert.ok(!rendre().includes('efface aussi du navigateur'), 'rien de relevé, rien d’affirmé');
+
+    RELEVE.oubliAuRetrait = ['mister-cim10', 'miss-dice'];
+    assert.ok(rendre().includes(`Chez Miss Dice et Mister Cim10, le retrait ${phrase}`));
+
+    RELEVE.oubliAuRetrait = [...RELEVE.retraitConsentement];
+    assert.ok(rendre().includes(`Le retrait ${phrase}`));
+  } finally {
+    RELEVE.oubliAuRetrait = releve;
+  }
+});
+
+test('le relevé de l’identifiant effacé ne nomme que des applications qui offrent le retrait', () => {
+  const avecRetrait = new Set(RELEVE.retraitConsentement);
+  assert.deepEqual(
+    RELEVE.oubliAuRetrait.filter(id => !avecRetrait.has(id)),
+    [],
+    'effacer au retrait suppose un retrait'
+  );
 });
 
 test('le relevé du retrait ne nomme que des applications qui mesurent', () => {
