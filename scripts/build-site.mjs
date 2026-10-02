@@ -1631,6 +1631,10 @@ const html = `<!doctype html>
         font-size: 0.9rem;
       }
       .action {
+        /* 24 px de haut : la cible minimale de WCAG 2.5.8. En ligne, la
+           boîte d'un lien n'a que la hauteur de sa police (23 px ici). */
+        display: inline-block;
+        line-height: 1.5rem;
         font-weight: 600;
         text-decoration: none;
       }
@@ -1719,15 +1723,25 @@ const html = `<!doctype html>
         outline: 3px solid var(--lien);
         outline-offset: 2px;
       }
+      /*
+       * DISCRÈTE PAR SES COULEURS, PAS PAR UN VOILE. La section était posée à
+       * l'opacité 0,72 : un voile compose une troisième couleur que personne
+       * n'a choisie, et en thème clair ses descriptions tombaient à 3,60:1, ses
+       * liens à 3,79:1 (4,5 exigé). Relevé par axe le 03/10/2026. La retenue
+       * passe désormais par les rôles de la palette : cartes sans fond, nom en
+       * \`--doux\` (6,61:1 sur le fond clair, 8,22 sur le sombre), liens en
+       * \`--lien\` (6,49 et 9,12).
+       */
       .coulisses {
         margin-top: 3rem;
         padding-top: 0.5rem;
         border-top: 1px solid var(--bord);
-        opacity: 0.72;
       }
-      .coulisses:hover,
-      .coulisses:focus-within {
-        opacity: 0.92;
+      .coulisses .carte {
+        background: transparent;
+      }
+      .coulisses .carte .nom {
+        color: var(--doux);
       }
       .coulisses-titre {
         display: inline-flex;
