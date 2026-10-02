@@ -94,6 +94,17 @@ La page propose un bascule **FR / EN** (catégories et maturités du socle,
 descriptions EN locales au hub) et un thème **clair / sombre / système**,
 mémorisés dans `localStorage`.
 
+**Les guides suivent la langue choisie** (`scripts/guides.mjs`). Chaque page de
+contenu déclare sa traduction (`<link rel="alternate" hreflang>`, posé par le
+socle) : une page et sa traduction ne font qu'**un** guide, montré dans la
+langue choisie. Sous un guide traduit, « Read in English » ou « Lire en
+français » mène à l'autre version ; un guide d'une seule langue porte une
+étiquette (« FR ») quand elle diffère de celle de la page. En anglais, les
+guides traduits passent en tête de leur groupe, et le lien « Guide » d'une
+carte mène au premier guide anglais de l'app (« Guide (FR) » s'il n'en a pas).
+Le HTML servi reste français et lie **toutes** les pages, traductions
+comprises : aucune ne perd le seul lien qui la relie à l'origine.
+
 ## Publication
 
 **Rien n'est commité.** Le workflow [`pages.yml`](.github/workflows/pages.yml)
