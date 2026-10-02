@@ -57,6 +57,12 @@ import {
 import { join } from 'node:path';
 import { serviceWorkerHub } from './hub-sw.mjs';
 import { INDEXNOW_CLE } from './indexnow-cle.mjs';
+import {
+  alternatesDe,
+  entreeGuide,
+  lienGuideDeCarte,
+  regrouperGuides,
+} from './guides.mjs';
 import { appsNonRelevees, pageAPropos } from './page-a-propos.mjs';
 import {
   JETONS,
@@ -199,7 +205,9 @@ async function lire(url, essais = 3) {
 /**
  * Les pages de contenu d'un site : les URL de son plan de site autres que
  * l'accueil, avec le titre (`<h1>`) et la langue (`<html lang>`) de chacune, et
- * le `lastmod` le plus récent du plan (pour l'index des plans de site). Depuis
+ * les traductions qu'elle déclare (`<link rel="alternate" hreflang>`, que
+ * `regrouperGuides` apparie), et le `lastmod` le plus récent du plan (pour
+ * l'index des plans de site). Depuis
  * le socle 6.17.0, chaque `content/pages/<slug>.md` d'une app devient
  * `<slug>.html` et entre à son plan de site ; les pages anglaises y entreront de
  * même. Les lister ICI donne à chacune un lien depuis le hub, avec son titre pour
@@ -220,7 +228,9 @@ async function pagesDe(base) {
       .replace(/\s+/g, ' ')
       .trim();
     const langue = (/<html[^>]*\slang="([a-z]{2})/i.exec(html)?.[1] ?? 'fr').toLowerCase();
-    if (titre) pages.push({ url: loc, titre: decode(titre), langue });
+    if (titre) {
+      pages.push({ url: loc, titre: decode(titre), langue, alternates: alternatesDe(html) });
+    }
   }
   return { pages, lastmod: dernierLastmod(entrees) };
 }
@@ -520,7 +530,6 @@ const visuelMono = nom => {
 };
 
 /** Le guide d'une carte : le premier en français, langue du hub servi. */
-const guideDeCarte = pages => pages.find(p => p.langue === 'fr') ?? pages[0];
 
 /**
  * Le lien principal d'une carte. Une app web s'ouvre hors du shell du hub ;
@@ -539,7 +548,7 @@ const carteApp = (app, featuredId) => {
   const pages = pagesParApp.get(app.id) ?? [];
   const aImage = imageParApp.has(app.id);
   const descEn = DESC_EN[app.id] ?? app.description;
-  const premierePage = guideDeCarte(pages);
+  const lienGuide = lienGuideDeCarte(regrouperGuides(pages));
   const plateforme = bureau ? 'desktop' : 'web';
   const aLaUne = featuredId && app.id === featuredId;
   const libelleOuvrir = pageDeBureau.has(app.id)
@@ -548,15 +557,7 @@ const carteApp = (app, featuredId) => {
   const actions = `
             <p class="actions">
               ${lienPrincipal(app, libelleOuvrir, ' class="action action-ouvrir"')}
-              ${
-                premierePage
-                  ? lienHorsShell(
-                      premierePage.url,
-                      '<span data-i18n="guide">Guide</span>',
-                      ` class="action action-guide guide-lien" title="${echappe(premierePage.titre)}"`
-                    )
-                  : ''
-              }
+              ${lienGuide}
             </p>`;
   const recherche = [
     app.name,
@@ -638,7 +639,7 @@ ${apps.map(a => carteApp(a, featuredId)).join('\n')}
 }).filter(Boolean);
 
 const featuredPages = featuredApp ? (pagesParApp.get(featuredApp.id) ?? []) : [];
-const featuredGuide = guideDeCarte(featuredPages);
+const featuredGuide = lienGuideDeCarte(regrouperGuides(featuredPages));
 const featuredDescEn = featuredApp
   ? (DESC_EN[featuredApp.id] ?? featuredApp.description)
   : '';
@@ -654,15 +655,7 @@ ${imageParApp.has(featuredApp.id) ? visuelPreview(featuredApp.id, featuredApp.na
           <p data-fr="${echappe(featuredApp.description)}" data-en="${echappe(featuredDescEn)}">${echappe(featuredApp.description)}</p>
           <p class="actions">
             ${lienPrincipal(featuredApp, pageDeBureau.has(featuredApp.id) ? '<span data-i18n="presentation">Présentation</span>' : '<span data-i18n="ouvrir">Ouvrir</span>', ' class="action action-ouvrir"')}
-            ${
-              featuredGuide
-                ? lienHorsShell(
-                    featuredGuide.url,
-                    '<span data-i18n="guide">Guide</span>',
-                    ` class="action action-guide guide-lien" title="${echappe(featuredGuide.titre)}"`
-                  )
-                : ''
-            }
+            ${featuredGuide}
           </p>
         </div>
       </div>
@@ -676,16 +669,16 @@ const hasardJson = JSON.stringify(urlsHasard).replace(/</g, '\\u003c');
 
 const carteCoulisse = s => {
   // Le squelette a sa page de contenu : elle n'était liée de nulle part.
-  const guide = guideDeCarte(pagesParSite.get(s.nom) ?? []);
+  const lienGuide = lienGuideDeCarte(regrouperGuides(pagesParSite.get(s.nom) ?? []));
   return `          <li class="carte">
             ${lienHorsShell(`/${s.nom}/`, '', ` class="carte-hit" aria-label="${echappe(s.titre)}"`)}
             <div class="corps">
               <h3><span class="nom">${echappe(s.titre)}</span></h3>
               <p>${echappe(s.desc)}</p>${
-                guide
+                lienGuide
                   ? `
               <p class="actions">
-                ${lienHorsShell(guide.url, '<span data-i18n="guide">Guide</span>', ` class="action action-guide guide-lien" title="${echappe(guide.titre)}"`)}
+                ${lienGuide}
               </p>`
                   : ''
               }
@@ -705,8 +698,10 @@ const nomCourt = titre => String(titre).split(/\s[-–—]\s/)[0].trim();
  * PREMIÈRE page de contenu de chaque app, sous l'ancre « Guide », qui ne dit
  * rien de la page ; les suivantes, et celle du squelette, n'avaient aucun lien
  * depuis l'origine. Groupés par catégorie, dans l'ordre du catalogue ; les
- * sites hors catalogue viennent en dernier. Les pages anglaises, qui vont
- * entrer aux plans de site, portent leur `lang` et leur `hreflang`.
+ * sites hors catalogue viennent en dernier.
+ *
+ * UN GUIDE PAR TRADUCTION APPARIÉE, dans la langue choisie : `scripts/guides.mjs`
+ * dit comment, et pourquoi le HTML servi garde un lien vers chaque page.
  */
 const groupesGuides = [
   ...catsAvecApps.map(cat => ({
@@ -717,7 +712,11 @@ const groupesGuides = [
       .slice()
       .sort(ordreApps)
       .flatMap(a =>
-        (pagesParApp.get(a.id) ?? []).map(p => ({ ...p, nom: a.name, site: a.appUrl }))
+        regrouperGuides(pagesParApp.get(a.id) ?? []).map(guide => ({
+          guide,
+          nom: a.name,
+          site: a.appUrl,
+        }))
       ),
   })),
   {
@@ -725,25 +724,20 @@ const groupesGuides = [
     libelle: 'Dans les coulisses',
     attribut: 'data-i18n="coulisses"',
     entrees: coulisses.flatMap(s =>
-      (pagesParSite.get(s.nom) ?? []).map(p => ({ ...p, nom: nomCourt(s.titre), site: s.base }))
+      regrouperGuides(pagesParSite.get(s.nom) ?? []).map(guide => ({
+        guide,
+        nom: nomCourt(s.titre),
+        site: s.base,
+      }))
     ),
   },
 ].filter(g => g.entrees.length);
 const nbGuides = groupesGuides.reduce((n, g) => n + g.entrees.length, 0);
-const languesGuides = new Set(groupesGuides.flatMap(g => g.entrees.map(e => e.langue)));
-/** Une seule langue : aucune étiquette. Plusieurs : chaque guide dit la sienne. */
+const languesGuides = new Set(
+  groupesGuides.flatMap(g => g.entrees.flatMap(e => Object.keys(e.guide)))
+);
+/** Plusieurs langues : l'introduction anglaise ne dit plus « in French ». */
 const plusieursLangues = languesGuides.size > 1;
-
-const entreeGuide = e => {
-  const langue = e.langue === 'fr' ? '' : ` lang="${echappe(e.langue)}"`;
-  const etiquette = plusieursLangues
-    ? ` <span class="guide-langue">${echappe(e.langue.toUpperCase())}</span>`
-    : '';
-  return `              <li${langue}>
-                ${lienHorsShell(e.url, echappe(e.titre), ` class="guide-titre" hreflang="${echappe(e.langue)}"`)}${etiquette}
-                <span class="guide-meta">${lienHorsShell(e.site, echappe(e.nom), ' class="guide-app"')}</span>
-              </li>`;
-};
 
 const guidesHtml = nbGuides
   ? `
@@ -756,7 +750,7 @@ ${groupesGuides
     g => `          <section class="guides-groupe" aria-labelledby="guides-${g.cle}">
             <h3 id="guides-${g.cle}" ${g.attribut}>${echappe(g.libelle)}</h3>
             <ul class="guides-liste">
-${g.entrees.map(entreeGuide).join('\n')}
+${g.entrees.map((e, ordre) => entreeGuide(e.guide, { nom: e.nom, site: e.site, ordre })).join('\n')}
             </ul>
           </section>`
   )
@@ -857,6 +851,8 @@ const i18nJson = JSON.stringify({
     licence: 'Licence MIT',
     nav: 'Catégories',
     guide: 'Guide',
+    guideFr: 'Guide',
+    guideEn: 'Guide (EN)',
     guides: 'Guides pratiques',
     guidesIntro:
       'Les pages de contenu des applications : méthodes pas à pas, règles et questions fréquentes.',
@@ -922,7 +918,10 @@ const i18nJson = JSON.stringify({
     coulissesIntro: 'Family infrastructure — not apps to install.',
     licence: 'MIT license',
     nav: 'Categories',
-    guide: 'Guide (FR)',
+    // « (FR) » seulement quand l'app n'a de guide qu'en français.
+    guide: 'Guide',
+    guideFr: 'Guide (FR)',
+    guideEn: 'Guide',
     guides: 'Practical guides',
     // Tant que tous les guides sont en français, la phrase le dit.
     guidesIntro: plusieursLangues || !languesGuides.has('fr')
@@ -1863,6 +1862,20 @@ const html = `<!doctype html>
         font-weight: 700;
         vertical-align: 0.1em;
       }
+      /* « Read in English », à côté du nom de l'application : un lien comme
+         lui, pas une étiquette (scripts/guides.mjs dit pourquoi). */
+      .guide-autre {
+        color: var(--doux);
+      }
+      /* Un guide d'une seule langue ne dit la sienne que si elle n'est pas
+         celle de la page : un français n'a pas à lire « FR » partout. */
+      .guide-seule {
+        display: none;
+      }
+      html[lang='en'] .guide-seule[data-langue='fr'],
+      html[lang='fr'] .guide-seule[data-langue='en'] {
+        display: inline-block;
+      }
       footer {
         margin-top: 3rem;
         padding-top: 1.5rem;
@@ -2425,6 +2438,29 @@ ${coulisses.map(carteCoulisse).join('\n')}
           });
           document.querySelectorAll('[data-fr][data-en]').forEach(function (el) {
             el.textContent = el.getAttribute(l === 'en' ? 'data-en' : 'data-fr');
+          });
+          // Un guide et sa traduction : l'adresse, sa langue et son titre
+          // suivent la langue choisie (scripts/guides.mjs).
+          ['href', 'hreflang', 'lang', 'title'].forEach(function (attr) {
+            document.querySelectorAll('[data-fr-' + attr + '][data-en-' + attr + ']').forEach(function (el) {
+              el.setAttribute(attr, el.getAttribute('data-' + l + '-' + attr));
+            });
+          });
+          // Les guides de la langue choisie en tête de leur groupe : dans le
+          // DOM, pas seulement à l'œil, pour que la tabulation suive.
+          document.querySelectorAll('.guides-liste').forEach(function (ul) {
+            var rang = function (li) {
+              var langues = (li.getAttribute('data-langues') || '').split(' ');
+              return langues.indexOf(l) >= 0 ? 0 : 1;
+            };
+            Array.prototype.slice
+              .call(ul.children)
+              .sort(function (a, b) {
+                return rang(a) - rang(b) || a.getAttribute('data-ordre') - b.getAttribute('data-ordre');
+              })
+              .forEach(function (li) {
+                ul.appendChild(li);
+              });
           });
           document.querySelectorAll('img[data-alt-fr][data-alt-en]').forEach(function (img) {
             img.setAttribute('alt', img.getAttribute(l === 'en' ? 'data-alt-en' : 'data-alt-fr'));
