@@ -56,6 +56,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { serviceWorkerHub } from './hub-sw.mjs';
+import { manifesteHub } from './manifeste-hub.mjs';
 import { INDEXNOW_CLE } from './indexnow-cle.mjs';
 import {
   alternatesDe,
@@ -490,9 +491,9 @@ const maturite = m =>
 
 /**
  * Les liens vers les apps s'ouvrent hors du shell du hub une fois installé :
- * le hub et les apps partagent l'origine `github.io`, donc un `scope: "/"`
- * avalerait sinon toute navigation. `target=_blank` renvoie Chrome / le
- * navigateur, où chaque app reste installable séparément.
+ * `target=_blank` renvoie Chrome / le navigateur, où chaque app reste
+ * installable séparément — à condition que la portée du hub ne la couvre pas,
+ * ce qu'elle a fait du 27/09 au 03/10/2026 (voir scripts/manifeste-hub.mjs).
  */
 const lienHorsShell = (url, texte, attrs = '') =>
   `<a href="${echappe(url)}" target="_blank" rel="noopener noreferrer"${attrs}>${texte}</a>`;
@@ -2964,40 +2965,15 @@ ${coulisses.map(carteCoulisse).join('\n')}
 // Manifest + service worker : sans eux, Chrome Android n'offre pas
 // « Installer l'application ». Le worker ne fait que du réseau d'abord, et
 // SEULEMENT pour le hub : sa portée « / » couvre aussi les apps, auxquelles il
-// ne doit pas toucher (voir scripts/hub-sw.mjs).
-const manifeste = {
-  id: `${FAMILY_ORIGIN}/`,
-  name: `Les applications de ${COMPTE}`,
-  short_name: 'GuiiuG',
+// ne doit pas toucher (voir scripts/hub-sw.mjs). Le MANIFESTE, lui, ne couvre
+// que la page du hub : une portée « / » rendait les vingt apps impossibles à
+// installer dès que le hub l'était (voir scripts/manifeste-hub.mjs).
+const manifeste = manifesteHub({
+  origine: FAMILY_ORIGIN,
+  compte: COMPTE,
   description,
-  lang: 'fr',
-  dir: 'ltr',
-  start_url: `${FAMILY_ORIGIN}/`,
-  scope: `${FAMILY_ORIGIN}/`,
-  display: 'standalone',
-  background_color: THEME,
-  theme_color: THEME,
-  icons: [
-    {
-      src: `${FAMILY_ORIGIN}/icon-192.png`,
-      sizes: '192x192',
-      type: 'image/png',
-      purpose: 'any',
-    },
-    {
-      src: `${FAMILY_ORIGIN}/icon-512.png`,
-      sizes: '512x512',
-      type: 'image/png',
-      purpose: 'any',
-    },
-    {
-      src: `${FAMILY_ORIGIN}/icon-512.png`,
-      sizes: '512x512',
-      type: 'image/png',
-      purpose: 'maskable',
-    },
-  ],
-};
+  theme: THEME,
+});
 
 /**
  * Les fichiers de premier niveau que sert le hub : les SEULS, avec
