@@ -134,9 +134,11 @@ construit sans publier.
   publication (`scripts/indexnow.mjs`), après avoir attendu qu'elles répondent
   200. Chaque application signale les siennes à son propre déploiement.
 
-**Échouer est sûr.** Si une application du catalogue ne répond pas, la
-construction échoue et rien n'est déployé : Pages continue de servir la version
-précédente. On ne publie jamais une page qui promettrait un 404.
+**Publication partielle.** Si une application du catalogue ne répond pas, la
+construction continue : la carte porte un badge « Non vérifiée », un bandeau
+l’explique, et le hub reste à jour pour les autres. `HUB_STRICT=1` (ou
+`--strict`) restaure l’ancien fail-safe total (rien n’est déployé). Le repli
+visuel d’une carte sans `og-image` est son `icon-192.png`, puis un monogramme.
 
 ## Construire en local
 

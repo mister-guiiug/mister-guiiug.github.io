@@ -37,9 +37,10 @@
  *   3. la dernière version publiée d'une application de bureau, pour sa page
  *      du hub.
  *
- * ÉCHOUER EST SÛR. Si une application du catalogue ne répond pas, la
- * construction échoue — et Pages continue de servir la version précédente. On
- * ne publie jamais une page qui promettrait un 404. Chaque sonde est retentée
+ * PANNE PARTIELLE. Si une application du catalogue ne répond pas, la
+ * construction continue : la carte porte un bandeau « non vérifiée » et un
+ * fallback visuel, plutôt que de geler tout le hub. `HUB_STRICT=1` (ou
+ * `--strict`) restaure l'ancien fail-safe total. Chaque sonde est retentée
  * avant de conclure.
  *
  * Usage : node scripts/build-site.mjs [dossier-de-sortie]
@@ -345,6 +346,8 @@ const surOrigine = url => url.startsWith(`${FAMILY_ORIGIN}/`);
 
 console.log(`${FAMILY_APPS.length} applications au catalogue :`);
 const enPanne = [];
+const strict =
+  process.env.HUB_STRICT === '1' || process.argv.includes('--strict');
 /** id de l'app → ses pages de contenu. */
 const pagesParApp = new Map();
 /** URL de base d'un site → `lastmod` le plus récent de son plan de site. */
@@ -355,6 +358,8 @@ const lastmodParPlan = new Map();
  * (+ `.webp` si sharp est dispo) : même source, poids mobile réduit.
  */
 const imageParApp = new Map();
+/** id de l'app → URL de son icon-192 (repli quand og-image manque). */
+const iconeParApp = new Map();
 for (const app of FAMILY_APPS) {
   // Une application de bureau pointe vers son dépôt : rien à sonder sur Pages.
   if (!surOrigine(app.appUrl)) {
@@ -369,19 +374,27 @@ for (const app of FAMILY_APPS) {
   const imageUrl = `${app.appUrl}og-image.jpg`;
   const aImage = code === 200 && (await statut(imageUrl)) === 200;
   if (aImage) imageParApp.set(app.id, imageUrl);
+  const iconUrl = `${app.appUrl}icon-192.png`;
+  const aIcone = code === 200 && (await statut(iconUrl)) === 200;
+  if (aIcone) iconeParApp.set(app.id, iconUrl);
   console.log(
     `  ${code === 200 ? '✓' : '✗'} ${app.id.padEnd(20)} ${code}` +
       (pages.length ? ` · ${pages.length} page(s) de contenu` : '') +
-      (aImage ? ' · image' : '')
+      (aImage ? ' · image' : aIcone ? ' · icône' : '')
   );
   if (code !== 200) enPanne.push(`${app.id} (${code})`);
 }
 if (enPanne.length) {
-  console.error(
-    `\nÉCHEC — des applications du catalogue ne répondent pas : ${enPanne.join(', ')}.` +
-      `\nRien n'est publié ; Pages continue de servir la version précédente.`
-  );
-  process.exit(1);
+  const msg =
+    `\nApplications du catalogue hors ligne : ${enPanne.join(', ')}.` +
+    (strict
+      ? `\nHUB_STRICT=1 — rien n'est publié ; Pages continue de servir la version précédente.`
+      : `\nPublication partielle : bandeau « non vérifiée » sur ces cartes.`);
+  if (strict) {
+    console.error(msg);
+    process.exit(1);
+  }
+  console.warn(msg);
 }
 
 const idsCatalogue = new Set(FAMILY_APPS.map(a => a.id));
@@ -530,6 +543,21 @@ const visuelMono = nom => {
             </span>`;
 };
 
+/** Icône PWA de l'app (192) — repli quand og-image manque, avant le monogramme. */
+const visuelIcone = (id, nom) => `
+            <span class="visuel visuel-icone" aria-hidden="true">
+              <img
+                class="visuel-icone-img"
+                src="${FAMILY_ORIGIN}/${echappe(id)}/icon-192.png"
+                alt=""
+                width="192"
+                height="192"
+                loading="lazy"
+                decoding="async"
+              />
+              <span class="visuel-icone-nom">${echappe(nom)}</span>
+            </span>`;
+
 /** Le guide d'une carte : le premier en français, langue du hub servi. */
 
 /**
@@ -548,6 +576,8 @@ const carteApp = (app, featuredId) => {
   const bureau = app.platform === 'desktop';
   const pages = pagesParApp.get(app.id) ?? [];
   const aImage = imageParApp.has(app.id);
+  const aIcone = iconeParApp.has(app.id);
+  const horsLigne = surOrigine(app.appUrl) && enPanne.some(x => x.startsWith(`${app.id} (`));
   const descEn = DESC_EN[app.id] ?? app.description;
   const lienGuide = lienGuideDeCarte(regrouperGuides(pages));
   const plateforme = bureau ? 'desktop' : 'web';
@@ -575,14 +605,24 @@ const carteApp = (app, featuredId) => {
     .toLowerCase();
   const visuel = aImage
     ? visuelPreview(app.id, app.name, '(max-width: 40rem) 100vw, 320px')
-    : visuelMono(app.name);
+    : aIcone
+      ? visuelIcone(app.id, app.name)
+      : visuelMono(app.name);
   const badgeBureau = bureau
     ? ` <span class="badge" data-i18n="badgeDesktop">${echappe('Application de bureau')}</span>`
     : '';
   const badgeUne = aLaUne
     ? ` <span class="badge badge-une" data-i18n="aLaUne">${echappe('À la une')}</span>`
     : '';
-  const classes = ['carte', bureau ? 'carte-bureau' : '', aLaUne ? 'carte-une' : '']
+  const badgePanne = horsLigne
+    ? ` <span class="badge badge-panne" data-i18n="badgePanne">${echappe('Non vérifiée')}</span>`
+    : '';
+  const classes = [
+    'carte',
+    bureau ? 'carte-bureau' : '',
+    aLaUne ? 'carte-une' : '',
+    horsLigne ? 'carte-panne' : '',
+  ]
     .filter(Boolean)
     .join(' ');
   const rang =
@@ -591,7 +631,7 @@ const carteApp = (app, featuredId) => {
             ${lienPrincipal(app, '', ` class="carte-hit" tabindex="-1" aria-hidden="true"`)}
 ${visuel}
             <div class="corps">
-              <h3><span class="nom">${echappe(app.name)}</span>${maturite(app.maturity)}${badgeBureau}${badgeUne}</h3>
+              <h3><span class="nom">${echappe(app.name)}</span>${maturite(app.maturity)}${badgeBureau}${badgeUne}${badgePanne}</h3>
               <p data-fr="${echappe(app.description)}" data-en="${echappe(descEn)}">${echappe(app.description)}</p>${actions}
             </div>
           </li>`;
@@ -650,7 +690,16 @@ const featuredHtml = featuredApp
       <p class="projecteur-label" id="projecteur-titre" data-i18n="projecteur">Coup de projecteur</p>
       <div class="projecteur-carte">
         ${lienPrincipal(featuredApp, '', ` class="carte-hit" tabindex="-1" aria-hidden="true"`)}
-${imageParApp.has(featuredApp.id) ? visuelPreview(featuredApp.id, featuredApp.name, '(max-width: 40rem) 100vw, 480px').replace('loading="lazy"', '') : visuelMono(featuredApp.name)}
+${
+  imageParApp.has(featuredApp.id)
+    ? visuelPreview(featuredApp.id, featuredApp.name, '(max-width: 40rem) 100vw, 480px').replace(
+        'loading="lazy"',
+        ''
+      )
+    : iconeParApp.has(featuredApp.id)
+      ? visuelIcone(featuredApp.id, featuredApp.name)
+      : visuelMono(featuredApp.name)
+}
         <div class="corps">
           <h2 class="projecteur-nom">${echappe(featuredApp.name)}</h2>
           <p data-fr="${echappe(featuredApp.description)}" data-en="${echappe(featuredDescEn)}">${echappe(featuredApp.description)}</p>
@@ -819,6 +868,9 @@ const i18nJson = JSON.stringify({
     sponsorBefore: 'Ces applications sont gratuites et open source.',
     sponsorLink: "M'offrir un café",
     badgeDesktop: 'Application de bureau',
+    badgePanne: 'Non vérifiée',
+    bandeauPanne:
+      'Certaines applications du catalogue ne répondent pas pour le moment — leurs cartes restent listées, sans promesse d’ouverture.',
     langFr: 'Français',
     langEn: 'English',
     themeLight: 'Clair',
@@ -887,6 +939,9 @@ const i18nJson = JSON.stringify({
     sponsorBefore: 'These apps are free and open source.',
     sponsorLink: 'Buy me a coffee',
     badgeDesktop: 'Desktop app',
+    badgePanne: 'Unverified',
+    bandeauPanne:
+      'Some catalog apps are unreachable right now — their cards stay listed, without promising they will open.',
     langFr: 'Français',
     langEn: 'English',
     themeLight: 'Light',
@@ -1597,6 +1652,47 @@ const html = `<!doctype html>
         opacity: 0.85;
         line-height: 1;
       }
+      .visuel-icone {
+        display: grid;
+        place-items: center;
+        gap: 0.55rem;
+        padding: 1.25rem 1rem;
+        background:
+          radial-gradient(circle at 70% 20%, color-mix(in srgb, var(--lien) 18%, transparent), transparent 50%),
+          var(--barre);
+      }
+      .visuel-icone-img {
+        width: 5.5rem;
+        height: 5.5rem;
+        border-radius: 1.15rem;
+        object-fit: cover;
+        box-shadow: 0 0.35rem 1rem color-mix(in srgb, var(--texte) 12%, transparent);
+      }
+      .visuel-icone-nom {
+        color: var(--doux);
+        font-size: 0.82rem;
+        font-weight: 600;
+      }
+      .badge-panne {
+        border-color: color-mix(in srgb, #b45309 45%, var(--bord));
+        background: color-mix(in srgb, #b45309 14%, var(--fond-carte));
+        color: #9a3412;
+      }
+      html[data-theme='dark'] .badge-panne {
+        color: #fdba74;
+      }
+      .carte-panne {
+        opacity: 0.92;
+      }
+      .bandeau-panne {
+        margin: 0 0 1rem;
+        padding: 0.7rem 0.95rem;
+        border: 1px solid color-mix(in srgb, #b45309 40%, var(--bord));
+        border-radius: 0.75rem;
+        background: color-mix(in srgb, #b45309 10%, var(--fond-carte));
+        color: var(--texte);
+        font-size: 0.9rem;
+      }
       .carte .visuel img,
       .projecteur-carte .visuel img {
         display: block;
@@ -2172,6 +2268,31 @@ const html = `<!doctype html>
         .projecteur-carte {
           grid-template-columns: 1fr;
         }
+        /* Maturité + guide : lisibles au pouce, pas des pastilles étroites. */
+        .carte h3 {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 0.35rem 0.45rem;
+        }
+        .carte .badge,
+        .carte [data-i18n-maturity] {
+          font-size: 0.78rem;
+          padding: 0.18rem 0.5rem;
+          min-height: 1.6rem;
+          line-height: 1.2;
+        }
+        .carte .actions {
+          gap: 0.55rem;
+          margin-top: 0.75rem;
+        }
+        .carte .action,
+        .carte .guide-lien {
+          min-height: 2.5rem;
+          padding: 0.45rem 0.85rem;
+          font-size: 0.92rem;
+          font-weight: 600;
+        }
       }
     </style>
   </head>
@@ -2326,7 +2447,11 @@ ${videSuggestions}
     </div>
 
     <main id="catalogue">
-${sections.join('\n\n')}
+${
+  enPanne.length
+    ? `      <p class="bandeau-panne" role="status" data-i18n="bandeauPanne">${echappe(libellesFr.bandeauPanne)}</p>\n`
+    : ''
+}${sections.join('\n\n')}
 ${guidesHtml}
 ${
   coulisses.length
