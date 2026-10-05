@@ -17,7 +17,11 @@
  * `lastmod`, puis `dater` pose la date. La date affichée ne fait donc jamais
  * changer l'empreinte.
  */
+import { echappe as echappeHtml } from './echappe.mjs';
 import { jourAffiche } from './seo-hub.mjs';
+
+/** L'échappement du hub, sous le nom que `page-a-propos.mjs` importe d'ici. */
+export { echappeHtml };
 
 /** Les jetons de date, remplacés par `dater` après le calcul de l'empreinte. */
 export const JETONS = {
@@ -33,13 +37,6 @@ export function dater(texte, jour) {
     .replaceAll(JETONS.majEn, jourAffiche(jour, 'en'))
     .replaceAll(JETONS.majIso, jour);
 }
-
-export const echappeHtml = texte =>
-  String(texte ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 
 /** Un bloc JSON-LD sûr : un `</script>` dans une chaîne fermerait le bloc. */
 export const jsonLdTexte = objet => JSON.stringify(objet).replace(/</g, '\\u003c');

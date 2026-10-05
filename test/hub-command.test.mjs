@@ -8,7 +8,11 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
 const ICI = dirname(fileURLToPath(import.meta.url));
-const BUILD = readFileSync(join(ICI, '..', 'scripts', 'build-site.mjs'), 'utf8');
+// La construction, le gabarit de l'accueil et son script client : depuis le
+// découpage de build-site.mjs, ce que ce test cherche vit dans ces trois fichiers.
+const BUILD = ['build-site.mjs', 'accueil.mjs', 'accueil/hub-client.js']
+  .map(f => readFileSync(join(ICI, '..', 'scripts', f), 'utf8'))
+  .join('\n');
 const HUB_CMD = readFileSync(join(ICI, '..', 'scripts', 'hub-command.js'), 'utf8');
 
 test('hub-command.js branche bindSearchHotkeys sur #filtre', () => {
