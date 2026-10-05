@@ -66,7 +66,7 @@ import {
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rendreAccueil } from './accueil.mjs';
-import { collecter } from './collecte.mjs';
+import { collecter, lireOctets } from './collecte.mjs';
 import { adresseApercu, versApercu } from './apercu.mjs';
 import { JETON_CSP, poserPolitique } from './csp.mjs';
 import { DESCRIPTIONS_EN } from './descriptions-en.mjs';
@@ -211,6 +211,60 @@ if (!command) {
 const robots = robotsTxt({ origine: FAMILY_ORIGIN });
 
 // ---------------------------------------------------------------------------
+// Miniatures : écrites AVANT le rendu, qui ne propose que ce qui existe
+// ---------------------------------------------------------------------------
+
+/**
+ * L'accueil décidait d'une miniature à la sonde, puis l'écrivait après coup :
+ * un échec d'écriture (sharp absent ou en erreur, image illisible) laissait
+ * une <source type="image/webp"> vers un fichier absent, et <picture> ne
+ * retombe pas sur son <img> : l'image était cassée au lieu du repli sur
+ * l'icône. Les miniatures sont donc écrites d'abord ; `apercus` dit ce qui
+ * l'a été, et le rendu ne propose que cela.
+ */
+mkdirSync(join(SORTIE, 'previews'), { recursive: true });
+let sharpMod = null;
+try {
+  sharpMod = (await import('sharp')).default;
+} catch {
+  console.log('sharp absent : miniatures en taille originale, sans WebP');
+}
+/** id de l'app → { webp } : sa miniature, réellement écrite dans previews/. */
+const apercus = new Map();
+await Promise.all(
+  [...imageParApp].map(async ([id, url]) => {
+    const octets = await lireOctets(url);
+    if (!octets) {
+      console.warn(`  ! miniature ${id} : image illisible, repli sur l'icône`);
+      return;
+    }
+    try {
+      const jpg = join(SORTIE, 'previews', `${id}.jpg`);
+      if (!sharpMod) {
+        writeFileSync(jpg, octets);
+        apercus.set(id, { webp: false });
+        return;
+      }
+      const base = sharpMod(octets).resize({ width: 640 });
+      await base.clone().jpeg({ quality: 78, mozjpeg: true }).toFile(jpg);
+      let webp = true;
+      try {
+        await base.clone().webp({ quality: 72 }).toFile(join(SORTIE, 'previews', `${id}.webp`));
+      } catch (e) {
+        webp = false;
+        console.warn(`  ! miniature ${id} : pas de WebP (${e.message ?? e})`);
+      }
+      apercus.set(id, { webp });
+    } catch (e) {
+      console.warn(`  ! miniature ${id} : ${e.message ?? e}, repli sur l'icône`);
+    }
+  })
+);
+console.log(
+  `Miniatures : ${apercus.size}/${imageParApp.size}, dont ${[...apercus.values()].filter(a => a.webp).length} en WebP`
+);
+
+// ---------------------------------------------------------------------------
 // index.html : voir scripts/accueil.mjs
 // ---------------------------------------------------------------------------
 
@@ -233,7 +287,7 @@ const {
   libellesEn,
   descriptionsEn: DESCRIPTIONS_EN,
   pagesParApp,
-  imageParApp,
+  apercus,
   iconeParApp,
   enPanne,
   pageDeBureau,
@@ -304,8 +358,11 @@ const sw = serviceWorkerHub({
   ]),
   // La miniature du projecteur, si elle existe ; sans sharp, pas de WebP.
   extras: sousChemin(
-    featuredId && imageParApp.has(featuredId)
-      ? [`/previews/${featuredId}.jpg`, `/previews/${featuredId}.webp`]
+    featuredId && apercus.has(featuredId)
+      ? [
+          `/previews/${featuredId}.jpg`,
+          ...(apercus.get(featuredId).webp ? [`/previews/${featuredId}.webp`] : []),
+        ]
       : []
   ),
   horsLigne: `${SOUS_CHEMIN}/offline.html`,
@@ -468,35 +525,6 @@ for (const { fichier, texte } of [...pagesDatees, { fichier: '404.html', texte: 
   }
 }
 
-mkdirSync(SORTIE, { recursive: true });
-mkdirSync(join(SORTIE, 'previews'), { recursive: true });
-
-let sharpMod = null;
-try {
-  sharpMod = (await import('sharp')).default;
-} catch {
-  console.log('sharp absent — previews en taille originale');
-}
-let previewsOk = 0;
-for (const [id, url] of imageParApp) {
-  try {
-    const buf = Buffer.from(await (await fetch(url)).arrayBuffer());
-    const destJpg = join(SORTIE, 'previews', `${id}.jpg`);
-    const destWebp = join(SORTIE, 'previews', `${id}.webp`);
-    if (sharpMod) {
-      const base = sharpMod(buf).resize({ width: 640 });
-      await base.clone().jpeg({ quality: 78, mozjpeg: true }).toFile(destJpg);
-      await base.clone().webp({ quality: 72 }).toFile(destWebp);
-    } else {
-      writeFileSync(destJpg, buf);
-    }
-    previewsOk += 1;
-  } catch (e) {
-    console.warn(`  ! preview ${id} : ${e.message ?? e}`);
-  }
-}
-console.log(`Previews : ${previewsOk}/${imageParApp.size}`);
-
 for (const { fichier, texte } of pagesDatees) writeFileSync(join(SORTIE, fichier), texte, 'utf8');
 // GitHub Pages sert `/404.html` pour toute URL inconnue sous la racine, avec le
 // statut 404 ; `noindex` en plus, par principe.
@@ -578,5 +606,5 @@ console.log(
       .join(', ')}, 404.html, robots.txt, sitemap.xml (index de ` +
     `${plansDuParc.length + 1} plans), sitemap-hub.xml (${pagesDuPlan.length} URL), seo-state.json, ` +
     `${VERIFICATION_GOOGLE}, BingSiteAuth.xml, clé IndexNow, og-image.jpg, ` +
-    `previews/ (${previewsOk}), offline.html, manifest.webmanifest, sw.js, icônes PWA`
+    `previews/ (${apercus.size}), offline.html, manifest.webmanifest, sw.js, icônes PWA`
 );

@@ -63,3 +63,44 @@ test('statut : une erreur est retentée, puis rendue telle quelle', async () => 
   };
   assert.equal(await statut('https://exemple.github.io/a/', { recuperer: panne, pauseMs: 0 }), 0);
 });
+
+test('lireOctets : une erreur n’est jamais prise pour une image', async () => {
+  const appels = [];
+  const repondre = statut => async url => {
+    appels.push(url);
+    return new Response(statut === 200 ? 'JPEG' : '<html>erreur</html>', { status: statut });
+  };
+  const { lireOctets } = await import('../scripts/collecte.mjs');
+  assert.equal(String(await lireOctets('https://e/a.jpg', { recuperer: repondre(200), pauseMs: 0 })), 'JPEG');
+  assert.equal(await lireOctets('https://e/b.jpg', { recuperer: repondre(503), pauseMs: 0 }), null);
+  assert.equal(await lireOctets('https://e/c.jpg', { recuperer: repondre(404), pauseMs: 0 }), null);
+  // 503 retenté trois fois, 404 lu une fois.
+  assert.equal(appels.filter(u => u.endsWith('b.jpg')).length, 3);
+  assert.equal(appels.filter(u => u.endsWith('c.jpg')).length, 1);
+});
+
+test('choisirIcone : la plus petite d’au moins 96 px, d’usage any, résolue contre le manifeste', async () => {
+  const { choisirIcone } = await import('../scripts/collecte.mjs');
+  const base = 'https://exemple.github.io/miss-dice/manifest.webmanifest';
+  assert.equal(
+    choisirIcone(
+      [
+        { src: 'icons/icon-512.png', sizes: '512x512', purpose: 'any' },
+        { src: 'icons/maskable-192.png', sizes: '192x192', purpose: 'maskable' },
+        { src: 'icons/icon-192.png', sizes: '192x192' },
+        { src: 'icons/icon-48.png', sizes: '48x48' },
+      ],
+      base
+    ),
+    'https://exemple.github.io/miss-dice/icons/icon-192.png'
+  );
+  // Une icône sans taille (SVG) ne sert qu'à défaut d'une icône raster.
+  assert.equal(
+    choisirIcone([{ src: 'icon.svg', sizes: 'any' }, { src: 'pwa-512.png', sizes: '512x512' }], base),
+    'https://exemple.github.io/miss-dice/pwa-512.png'
+  );
+  assert.equal(choisirIcone([{ src: 'icon.svg', sizes: 'any' }], base), 'https://exemple.github.io/miss-dice/icon.svg');
+  assert.equal(choisirIcone(undefined, base), null);
+  assert.equal(choisirIcone([{ src: 'petit.png', sizes: '48x48' }], base), null);
+  assert.equal(choisirIcone([{ src: 'seule-maskable.png', sizes: '192x192', purpose: 'maskable' }], base), null);
+});

@@ -147,6 +147,82 @@ async function lire(url, essais = 3) {
 }
 
 /**
+ * L'icône que déclare un manifeste : la plus petite d'au moins 96 px, d'usage
+ * « any » (une icône « maskable » est rognée par le système, pas par une
+ * carte). Une icône sans taille numérique (SVG, « any ») ne sert qu'à défaut.
+ *
+ * @param {unknown} icones  le champ `icons` du manifeste
+ * @param {string} base     l'adresse du manifeste, contre laquelle se résolvent les `src`
+ * @returns {string|null}
+ */
+export function choisirIcone(icones, base) {
+  const candidates = (Array.isArray(icones) ? icones : [])
+    .filter(i => i && typeof i.src === 'string')
+    .filter(i => !i.purpose || String(i.purpose).split(/\s+/).includes('any'))
+    .map(i => ({
+      src: i.src,
+      taille: Math.max(0, ...String(i.sizes ?? '').split(/\s+/).map(t => parseInt(t, 10) || 0)),
+    }))
+    .filter(i => i.taille === 0 || i.taille >= 96)
+    .sort((a, b) => (a.taille || Infinity) - (b.taille || Infinity));
+  if (!candidates.length) return null;
+  try {
+    return new URL(candidates[0].src, base).href;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * L'icône d'une app, lue dans SON manifeste : treize apps sur vingt n'ont pas
+ * d'`icon-192.png` à la racine de leur site (relevé le 5 octobre 2026), et
+ * toutes déclarent leurs icônes. L'icône doit rester sous le chemin de l'app
+ * et répondre. Repli : `icon-192.png`, sondé comme avant.
+ */
+async function iconeDe(appUrl) {
+  for (const nom of ['manifest.webmanifest', 'manifest.json']) {
+    const texte = await lire(`${appUrl}${nom}`);
+    if (!texte) continue;
+    let manifeste;
+    try {
+      manifeste = JSON.parse(texte);
+    } catch {
+      continue;
+    }
+    const icone = choisirIcone(manifeste?.icons, `${appUrl}${nom}`);
+    if (icone?.startsWith(appUrl) && (await statut(icone)) === 200) return icone;
+  }
+  const repli = `${appUrl}icon-192.png`;
+  return (await statut(repli)) === 200 ? repli : null;
+}
+
+/**
+ * Les octets d'une image, ou `null` : un statut d'erreur n'est jamais pris
+ * pour une image (la page d'erreur était écrite telle quelle en .jpg). Retenté
+ * comme `lire` ; un 404 est une réponse.
+ *
+ * @returns {Promise<Buffer|null>}
+ */
+export async function lireOctets(url, { essais = 3, pauseMs = 1500, recuperer = fetch } = {}) {
+  for (let i = 1; i <= essais; i += 1) {
+    try {
+      const lu = await enFile(async () => {
+        const r = await recuperer(url);
+        if (r.ok) return { octets: Buffer.from(await r.arrayBuffer()) };
+        await r.body?.cancel();
+        return { code: r.status };
+      });
+      if (lu.octets) return lu.octets;
+      if (lu.code === 404) return null;
+    } catch {
+      // réseau : on retente
+    }
+    if (i < essais) await pause(pauseMs * i);
+  }
+  return null;
+}
+
+/**
  * Les pages de contenu d'un site : les URL de son plan de site autres que
  * l'accueil, avec le titre (`<h1>`) et la langue (`<html lang>`) de chacune, et
  * les traductions qu'elle déclare (`<link rel="alternate" hreflang>`, que
@@ -303,14 +379,14 @@ export async function collecter({ compte, socle, soi, jeton, strict }) {
       if (!surOrigine(app.appUrl)) return { app, horsOrigine: true };
       const code = await statut(app.appUrl);
       if (code !== 200) {
-        return { app, code, pages: [], lastmod: null, aImage: false, aIcone: false };
+        return { app, code, pages: [], lastmod: null, aImage: false, icone: null };
       }
-      const [{ pages, lastmod }, aImage, aIcone] = await Promise.all([
+      const [{ pages, lastmod }, aImage, icone] = await Promise.all([
         pagesDe(app.appUrl),
         statut(`${app.appUrl}og-image.jpg`).then(c => c === 200),
-        statut(`${app.appUrl}icon-192.png`).then(c => c === 200),
+        iconeDe(app.appUrl),
       ]);
-      return { app, code, pages, lastmod, aImage, aIcone };
+      return { app, code, pages, lastmod, aImage, icone };
     })
   );
 
@@ -325,9 +401,12 @@ export async function collecter({ compte, socle, soi, jeton, strict }) {
    * (+ `.webp` si sharp est dispo) : même source, poids mobile réduit.
    */
   const imageParApp = new Map();
-  /** id de l'app → URL de son icon-192 (repli quand og-image manque). */
+  /**
+   * id de l'app → URL de son icône, lue dans son manifeste : celle de la liste
+   * compacte sur mobile, et le repli quand l'og-image manque.
+   */
   const iconeParApp = new Map();
-  for (const { app, horsOrigine, code, pages, lastmod, aImage, aIcone } of sondes) {
+  for (const { app, horsOrigine, code, pages, lastmod, aImage, icone } of sondes) {
     if (horsOrigine) {
       console.log(`  · ${app.id.padEnd(20)} hors origine (${app.platform})`);
       continue;
@@ -335,11 +414,12 @@ export async function collecter({ compte, socle, soi, jeton, strict }) {
     pagesParApp.set(app.id, pages);
     lastmodParPlan.set(app.appUrl, lastmod);
     if (aImage) imageParApp.set(app.id, `${app.appUrl}og-image.jpg`);
-    if (aIcone) iconeParApp.set(app.id, `${app.appUrl}icon-192.png`);
+    if (icone) iconeParApp.set(app.id, icone);
     console.log(
       `  ${code === 200 ? '✓' : '✗'} ${app.id.padEnd(20)} ${code}` +
         (pages.length ? ` · ${pages.length} page(s) de contenu` : '') +
-        (aImage ? ' · image' : aIcone ? ' · icône' : '')
+        (aImage ? ' · image' : '') +
+        (icone ? ' · icône' : '')
     );
     if (code !== 200) enPanne.push(`${app.id} (${code})`);
   }

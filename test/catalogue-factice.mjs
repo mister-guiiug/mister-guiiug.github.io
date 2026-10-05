@@ -77,7 +77,7 @@ export const donneesFactices = (surcharge = {}) => ({
     ],
     ['mister-beta', []],
   ]),
-  imageParApp: new Map([['miss-alpha', `${ORIGINE}/miss-alpha/og-image.jpg`]]),
+  apercus: new Map([['miss-alpha', { webp: true }]]),
   iconeParApp: new Map([['mister-beta', `${ORIGINE}/mister-beta/icon-192.png`]]),
   enPanne: [],
   pageDeBureau: new Map([

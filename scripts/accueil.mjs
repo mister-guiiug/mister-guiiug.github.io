@@ -103,11 +103,29 @@ const lienHorsShell = (url, texte, attrs = '') =>
  * La vignette d'une app : la miniature de son image de partage. Son `alt` la
  * décrit (« Aperçu de Miss Dice ») : vide, Bing la comptait parmi les images
  * sans texte de remplacement, vingt sur la page. Le bascule FR/EN le traduit.
+ *
+ * NE PROPOSE QUE CE QUI EXISTE. Les miniatures sont écrites avant le rendu
+ * (build-site.mjs) : `webp` dit si la version WebP l'a été. Une <source> qui
+ * répond 404 ne retombe pas sur l'<img> : l'image était cassée, au lieu du
+ * repli sur l'icône.
+ *
+ * SUR MOBILE, L'ICÔNE. En liste compacte, la carte montre l'icône de l'app ;
+ * une <source media> la choisit, et le navigateur ne télécharge que l'image
+ * retenue. `prioritaire` : l'image du projecteur, chargée tout de suite.
  */
-const visuelPreview = (origine, id, nom, sizes) => `
+const visuelPreview = (origine, id, nom, { webp = false, icone = null, prioritaire = false } = {}) => `
             <span class="visuel">
-              <picture>
-                <source type="image/webp" srcset="${origine}/previews/${echappe(id)}.webp" />
+              <picture>${
+                icone
+                  ? `
+                <source media="(max-width: 40rem)" srcset="${echappe(icone)}" width="192" height="192" />`
+                  : ''
+              }${
+                webp
+                  ? `
+                <source type="image/webp" srcset="${origine}/previews/${echappe(id)}.webp" />`
+                  : ''
+              }
                 <img
                   class="visuel-img"
                   src="${origine}/previews/${echappe(id)}.jpg"
@@ -115,9 +133,13 @@ const visuelPreview = (origine, id, nom, sizes) => `
                   data-alt-fr="${echappe(`Aperçu de ${nom}`)}"
                   data-alt-en="${echappe(`Preview of ${nom}`)}"
                   width="640"
-                  height="336"
-                  sizes="${echappe(sizes)}"
-                  loading="lazy"
+                  height="336"${
+                    prioritaire
+                      ? `
+                  fetchpriority="high"`
+                      : `
+                  loading="lazy"`
+                  }
                   decoding="async"
                 />
               </picture>
@@ -131,12 +153,12 @@ const visuelMono = nom => {
             </span>`;
 };
 
-/** Icône PWA de l'app (192) — repli quand og-image manque, avant le monogramme. */
-const visuelIcone = (origine, id, nom) => `
+/** L'icône de l'app, lue dans son manifeste : repli quand og-image manque, avant le monogramme. */
+const visuelIcone = (icone, nom) => `
             <span class="visuel visuel-icone" aria-hidden="true">
               <img
                 class="visuel-icone-img"
-                src="${origine}/${echappe(id)}/icon-192.png"
+                src="${echappe(icone)}"
                 alt=""
                 width="192"
                 height="192"
@@ -162,7 +184,7 @@ const carteApp = (ctx, app, featuredId) => {
   const {
     origine,
     pagesParApp,
-    imageParApp,
+    apercus,
     iconeParApp,
     enPanne,
     descriptionsEn,
@@ -173,8 +195,8 @@ const carteApp = (ctx, app, featuredId) => {
   } = ctx;
   const bureau = app.platform === 'desktop';
   const pages = pagesParApp.get(app.id) ?? [];
-  const aImage = imageParApp.has(app.id);
-  const aIcone = iconeParApp.has(app.id);
+  const apercu = apercus.get(app.id);
+  const icone = iconeParApp.get(app.id) ?? null;
   const horsLigne = surOrigine(app.appUrl) && enPanne.some(x => x.startsWith(`${app.id} (`));
   const descEn = descriptionsEn[app.id] ?? app.description;
   const lienGuide = lienGuideDeCarte(regrouperGuides(pages));
@@ -201,10 +223,10 @@ const carteApp = (ctx, app, featuredId) => {
   ]
     .join(' ')
     .toLowerCase();
-  const visuel = aImage
-    ? visuelPreview(origine, app.id, app.name, '(max-width: 40rem) 100vw, 320px')
-    : aIcone
-      ? visuelIcone(origine, app.id, app.name)
+  const visuel = apercu
+    ? visuelPreview(origine, app.id, app.name, { webp: apercu.webp, icone })
+    : icone
+      ? visuelIcone(icone, app.name)
       : visuelMono(app.name);
   const badgeBureau = bureau
     ? ` <span class="badge" data-i18n="badgeDesktop">${echappe('Application de bureau')}</span>`
@@ -256,7 +278,9 @@ ${dansCat.map(a => carteApp(ctx, a, ctx.featuredId)).join('\n')}
 
 const projecteurHtml = (ctx, featuredApp) => {
   if (!featuredApp) return '';
-  const { origine, pagesParApp, imageParApp, iconeParApp, descriptionsEn, pageDeBureau } = ctx;
+  const { origine, pagesParApp, apercus, iconeParApp, descriptionsEn, pageDeBureau } = ctx;
+  const apercu = apercus.get(featuredApp.id);
+  const icone = iconeParApp.get(featuredApp.id) ?? null;
   const featuredPages = pagesParApp.get(featuredApp.id) ?? [];
   const featuredGuide = lienGuideDeCarte(regrouperGuides(featuredPages));
   const featuredDescEn = descriptionsEn[featuredApp.id] ?? featuredApp.description;
@@ -266,13 +290,10 @@ const projecteurHtml = (ctx, featuredApp) => {
       <div class="projecteur-carte">
         ${lienPrincipal(ctx, featuredApp, '', ` class="carte-hit" tabindex="-1" aria-hidden="true"`)}
 ${
-  imageParApp.has(featuredApp.id)
-    ? visuelPreview(origine, featuredApp.id, featuredApp.name, '(max-width: 40rem) 100vw, 480px').replace(
-        'loading="lazy"',
-        ''
-      )
-    : iconeParApp.has(featuredApp.id)
-      ? visuelIcone(origine, featuredApp.id, featuredApp.name)
+  apercu
+    ? visuelPreview(origine, featuredApp.id, featuredApp.name, { webp: apercu.webp, icone, prioritaire: true })
+    : icone
+      ? visuelIcone(icone, featuredApp.name)
       : visuelMono(featuredApp.name)
 }
         <div class="corps">
@@ -596,7 +617,8 @@ const libellesClient = ctx => {
  * @param {object} donnees.libellesEn     libellés du socle, en anglais
  * @param {Record<string, string>} donnees.descriptionsEn
  * @param {Map<string, object[]>} donnees.pagesParApp   id → pages de contenu
- * @param {Map<string, string>} donnees.imageParApp     id → URL de son og-image
+ * @param {Map<string, { webp: boolean }>} donnees.apercus  id → sa miniature, ÉCRITE
+ *   dans previews/ (JPEG toujours, WebP si `webp`) ; absente, la carte prend l'icône
  * @param {Map<string, string>} donnees.iconeParApp     id → URL de son icône
  * @param {string[]} donnees.enPanne      « id (code) » des apps qui ne répondent pas
  * @param {Map<string, object>} donnees.pageDeBureau    id → page du hub d'une app de bureau
@@ -607,14 +629,14 @@ const libellesClient = ctx => {
  * @returns {{ html: string, description: string, featuredId: string|null, nbSections: number, nbGuides: number }}
  */
 export function rendreAccueil(donnees) {
-  const { origine, compte, apps, categories, imageParApp } = donnees;
+  const { origine, compte, apps, categories, apercus } = donnees;
   const surOrigine = url => url.startsWith(`${origine}/`);
   const catsAvecApps = categories.filter(cat => apps.some(a => a.category === cat));
 
   /** Coup de projecteur : FEATURED_ID si valide, sinon première stable avec image. */
   const featuredApp =
     (FEATURED_ID ? apps.find(a => a.id === FEATURED_ID) : null) ??
-    apps.find(a => a.maturity === 'stable' && imageParApp.has(a.id)) ??
+    apps.find(a => a.maturity === 'stable' && apercus.has(a.id)) ??
     null;
   const featuredId = featuredApp?.id ?? null;
 
@@ -777,6 +799,9 @@ function pageHtml(ctx) {
     <script type="application/ld+json">${jsonLd}</script>
     <script>
       (function () {
+        // Le fondu des miniatures n'existe qu'avec le script : sans lui, elles
+        // s'affichent d'emblée (voir .visuel-img dans hub.css).
+        document.documentElement.classList.add('js');
         try {
           var t = localStorage.getItem('hub-theme') || 'system';
           var l = localStorage.getItem('hub-lang') || 'fr';

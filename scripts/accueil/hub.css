@@ -714,12 +714,17 @@ html[data-theme='dark'] .badge-panne {
   position: relative;
   z-index: 2;
 }
-.visuel-img {
-  opacity: 0;
+/*
+ * LE FONDU DES MINIATURES N'EXISTE QU'AVEC LE SCRIPT. Elles restaient à
+ * l'opacité 0 jusqu'à ce que le script les marque chargées : sans script, ou
+ * s'il échouait, vingt images invisibles. La classe « js », posée dans <head>,
+ * conditionne désormais le fondu.
+ */
+html.js .visuel-img {
   transition: opacity 0.35s ease;
 }
-.visuel-img.is-loaded {
-  opacity: 1;
+html.js .visuel-img:not(.is-loaded) {
+  opacity: 0;
 }
 .badge-une {
   color: var(--lien);
@@ -1133,9 +1138,11 @@ footer p:last-child {
   .marque {
     animation: none;
   }
-  .visuel-img {
-    opacity: 1;
+  html.js .visuel-img {
     transition: none;
+  }
+  html.js .visuel-img:not(.is-loaded) {
+    opacity: 1;
   }
   .collant,
   .filtres-panel {
@@ -1221,32 +1228,124 @@ footer p:last-child {
     flex-direction: column;
     align-items: flex-start;
   }
-  .projecteur-carte {
-    grid-template-columns: 1fr;
+  h2 {
+    margin: 1.6rem 0 0.6rem;
   }
-  /* Maturité + guide : lisibles au pouce, pas des pastilles étroites. */
-  .carte h3 {
+  /* Une section compacte mesure environ 17rem : l'estimation suit, et la hauteur
+     de la page ne bondit plus quand une section s'affiche. */
+  main > section[data-cat-section] {
+    contain-intrinsic-size: auto 17rem;
+  }
+  /*
+   * EN LISTE COMPACTE. Une carte tient sur une rangée : l'icône de l'app (une
+   * <source media> la choisit au lieu de la miniature), son nom et ses
+   * badges, une ligne de description, et « Ouvrir ». Ses guides restent
+   * listés plus bas, dans « Guides pratiques ». Mesuré à 375x812 : la première
+   * carte entre dans le premier écran.
+   */
+  main ul {
+    gap: 0.5rem;
+  }
+  .carte,
+  .projecteur-carte {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.55rem 0.7rem;
+  }
+  .carte .visuel,
+  .projecteur-carte .visuel {
+    flex: 0 0 3rem;
+    width: 3rem;
+    height: 3rem;
+    min-height: 0;
+    aspect-ratio: 1;
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+  .visuel-icone {
+    padding: 0;
+    gap: 0;
+  }
+  .visuel-icone-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .visuel-icone-nom {
+    display: none;
+  }
+  .mono-lettre {
+    font-size: 1.4rem;
+  }
+  .carte .corps,
+  .projecteur-carte .corps {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 0.6rem;
+    min-width: 0;
+    padding: 0;
+  }
+  .carte h3,
+  .projecteur-nom {
+    grid-column: 1;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.35rem 0.45rem;
+    gap: 0.15rem 0.35rem;
+    margin: 0;
+    font-size: 0.98rem;
+    line-height: 1.3;
   }
-  .carte .badge,
-  .carte [data-i18n-maturity] {
-    font-size: 0.78rem;
-    padding: 0.18rem 0.5rem;
-    min-height: 1.6rem;
-    line-height: 1.2;
+  .carte .badge {
+    margin-left: 0;
+    font-size: 0.68rem;
   }
-  .carte .actions {
-    gap: 0.55rem;
-    margin-top: 0.75rem;
+  .carte .corps > p:not(.actions),
+  .projecteur-carte .corps > p:not(.actions) {
+    grid-column: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 0.86rem;
   }
-  .carte .action,
-  .carte .guide-lien {
+  .carte .actions,
+  .projecteur-carte .actions {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin: 0;
+  }
+  .carte .action-guide,
+  .projecteur-carte .action-guide {
+    display: none;
+  }
+  .carte .action-ouvrir,
+  .projecteur-carte .action-ouvrir {
     min-height: 2.5rem;
     padding: 0.45rem 0.85rem;
-    font-size: 0.92rem;
-    font-weight: 600;
+    border: 1px solid color-mix(in srgb, var(--lien) 35%, var(--bord));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--lien) 10%, var(--fond-carte));
+    font-size: 0.9rem;
+  }
+  /* Le projecteur se fond dans l'en-tête : une rangée de plus, à peine teintée. */
+  .projecteur {
+    margin: 0.85rem 0 0;
+    padding: 0.55rem 0.7rem 0.6rem;
+    border-radius: 0.9rem;
+  }
+  .projecteur-label {
+    margin: 0 0 0.35rem;
+    font-size: 0.72rem;
+  }
+  .projecteur-carte {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    overflow: visible;
   }
 }

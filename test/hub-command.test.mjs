@@ -105,7 +105,7 @@ const accueil = raccourci =>
     libellesEn: { categories: { jeux: 'Games' }, maturity: {} },
     descriptionsEn: {},
     pagesParApp: new Map(),
-    imageParApp: new Map(),
+    apercus: new Map(),
     iconeParApp: new Map(),
     enPanne: [],
     pageDeBureau: new Map(),

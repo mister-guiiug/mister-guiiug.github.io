@@ -137,3 +137,64 @@ test('accueil : le bandeau de publication partielle porte son texte dans le HTML
   assert.match(bandeau, /^Certaines applications du catalogue ne répondent pas/);
   assert.match(html, /<span class="badge badge-panne" data-i18n="badgePanne">Non vérifiée<\/span>/);
 });
+
+/** Le <picture> d'une carte, repéré par l'identifiant de son app. */
+const visuelDe = (html, id) =>
+  new RegExp(String.raw`<picture>((?:(?!</picture>)[\s\S])*?previews/${id}\.jpg[\s\S]*?)</picture>`).exec(html)?.[1];
+
+test('accueil : une miniature n’est proposée que si elle a été écrite', () => {
+  // WebP écrit : sa source est proposée.
+  const avec = rendreAccueil(donnees()).html;
+  assert.match(visuelDe(avec, 'miss-alpha'), /<source type="image\/webp" srcset="https:\/\/exemple\.github\.io\/previews\/miss-alpha\.webp" \/>/);
+  // Sans WebP (sharp absent ou en échec) : aucune source WebP, l'<img> JPEG seul.
+  const sansWebp = rendreAccueil(donnees({ apercus: new Map([['miss-alpha', { webp: false }]]) })).html;
+  assert.ok(!sansWebp.includes('image/webp'), 'une source WebP vers un fichier absent casse l’image');
+  assert.ok(visuelDe(sansWebp, 'miss-alpha'));
+  // Miniature non écrite : l'icône si elle existe, sinon l'initiale.
+  const sans = rendreAccueil(
+    donnees({
+      apercus: new Map(),
+      iconeParApp: new Map([['miss-alpha', 'https://exemple.github.io/miss-alpha/icon-192.png']]),
+    })
+  ).html;
+  assert.ok(!sans.includes('/previews/'), 'aucune miniature proposée');
+  assert.match(sans, /class="visuel-icone-img"\s+src="https:\/\/exemple\.github\.io\/miss-alpha\/icon-192\.png"/);
+  // Plus aucun attribut sizes sans srcset de largeurs.
+  assert.doesNotMatch(avec, /<img[^>]*\ssizes=/);
+});
+
+test('accueil : sur mobile l’icône, choisie par une source media, et le projecteur en priorité', () => {
+  const html = rendreAccueil(
+    donnees({ iconeParApp: new Map([['miss-alpha', 'https://exemple.github.io/miss-alpha/icon-192.png']]) })
+  ).html;
+  // Le projecteur (miss-alpha, première stable avec miniature) et sa carte.
+  const visuels = [...html.matchAll(/<picture>([\s\S]*?)<\/picture>/g)].map(m => m[1]);
+  assert.equal(visuels.length, 2);
+  for (const v of visuels) {
+    assert.match(
+      v,
+      /<source media="\(max-width: 40rem\)" srcset="https:\/\/exemple\.github\.io\/miss-alpha\/icon-192\.png" width="192" height="192" \/>/
+    );
+    // La source media précède la source WebP : elle l'emporte sur mobile.
+    assert.ok(v.indexOf('media=') < v.indexOf('image/webp'));
+  }
+  const [projecteur, carte] = visuels;
+  assert.match(projecteur, /fetchpriority="high"/);
+  assert.doesNotMatch(projecteur, /loading="lazy"/);
+  assert.match(carte, /loading="lazy"/);
+  assert.doesNotMatch(carte, /fetchpriority/);
+});
+
+test('accueil : sans script, les miniatures restent visibles', () => {
+  const { html } = rendreAccueil(donnees());
+  const theme = /<script>\s*\(function \(\) \{([\s\S]*?)\}\)\(\);\s*<\/script>/.exec(html)?.[1] ?? '';
+  assert.match(theme, /document\.documentElement\.classList\.add\('js'\)/);
+  const style = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
+  assert.match(style, /html\.js \.visuel-img:not\(\.is-loaded\) \{\s*opacity: 0;/);
+  // Aucune règle ne cache une miniature hors de html.js.
+  for (const [, selecteurs, corps] of style.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (/opacity:\s*0;/.test(corps) && /\.visuel-img/.test(selecteurs)) {
+      assert.match(selecteurs, /html\.js/, `règle sans html.js : ${selecteurs.trim()}`);
+    }
+  }
+});
