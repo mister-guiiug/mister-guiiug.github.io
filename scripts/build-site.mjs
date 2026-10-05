@@ -67,6 +67,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rendreAccueil } from './accueil.mjs';
 import { collecter } from './collecte.mjs';
+import { JETON_CSP, poserPolitique } from './csp.mjs';
 import { DESCRIPTIONS_EN } from './descriptions-en.mjs';
 import { serviceWorkerHub } from './hub-sw.mjs';
 import { manifesteHub } from './manifeste-hub.mjs';
@@ -432,9 +433,26 @@ const indexPlans = indexDePlans([
 
 /** Les pages, datées : le jeton cède la place au jour de leur dernier changement. */
 const pagesDatees = pagesDuPlan.map(p => ({ ...p, texte: dater(p.texte, lastmodDe(p.chemin)) }));
+
+/**
+ * La politique de sécurité de l'accueil, posée sur la page DATÉE : ses
+ * empreintes portent sur les scripts tels qu'ils sont publiés, date comprise
+ * (voir scripts/csp.mjs). Le module Ctrl+K n'y figure que s'il est publié.
+ */
+for (const p of pagesDatees) {
+  if (p.fichier !== 'index.html') continue;
+  p.texte = poserPolitique(p.texte, {
+    origine: FAMILY_ORIGIN,
+    scripts: command ? [`${FAMILY_ORIGIN}/hub-command.js`, `${FAMILY_ORIGIN}/command.js`] : [],
+  });
+}
+
 for (const { fichier, texte } of [...pagesDatees, { fichier: '404.html', texte: html404 }]) {
   if (Object.values(JETONS).some(j => texte.includes(j))) {
     throw new Error(`${fichier} : un jeton de date n'a pas été remplacé`);
+  }
+  if (texte.includes(JETON_CSP)) {
+    throw new Error(`${fichier} : la politique de sécurité n'a pas été posée`);
   }
 }
 

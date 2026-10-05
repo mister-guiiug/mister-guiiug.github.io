@@ -14,6 +14,7 @@
  * élément `<script>`.
  */
 import { readFileSync } from 'node:fs';
+import { JETON_CSP } from './csp.mjs';
 import { echappe } from './echappe.mjs';
 import { entreeGuide, lienGuideDeCarte, regrouperGuides } from './guides.mjs';
 import { JETONS, entiteEditeur, entiteSite, jsonLdTexte } from './pages-hub.mjs';
@@ -736,6 +737,7 @@ function pageHtml(ctx) {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta http-equiv="Content-Security-Policy" content="${JETON_CSP}" />
     <title>${titrePage}</title>
     <meta name="description" content="${echappe(description)}" />
     <meta name="robots" content="index, follow" />

@@ -3,105 +3,16 @@
  *
  * `index.html` est l'artefact principal du dépôt, et jusqu'au découpage de
  * build-site.mjs aucun test ne le lisait : le module ne s'importait pas sans
- * lancer la collecte. Ces tests appellent `rendreAccueil` sur des données
- * écrites ici, dont des noms, descriptions, titres et URL piégés.
+ * lancer la collecte. Ces tests appellent `rendreAccueil` sur les données de
+ * test/catalogue-factice.mjs, dont des noms, descriptions, titres et URL piégés.
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { rendreAccueil } from '../scripts/accueil.mjs';
 import { JETONS } from '../scripts/pages-hub.mjs';
+import { ORIGINE, donneesFactices } from './catalogue-factice.mjs';
 
-const ORIGINE = 'https://exemple.github.io';
-
-const PIEGE = '</script><script>alert(1)</script>';
-
-const APPS = [
-  {
-    id: 'miss-alpha',
-    name: 'Miss <Alpha> & "Co"',
-    description: `Décrit ${PIEGE} & "entre guillemets"`,
-    category: 'jeux',
-    maturity: 'stable',
-    platform: 'web',
-    appUrl: `${ORIGINE}/miss-alpha/`,
-    repoUrl: 'https://github.com/exemple/miss-alpha',
-  },
-  {
-    id: 'mister-beta',
-    name: 'Mister Beta',
-    description: 'Une application en bêta.',
-    category: 'outils',
-    maturity: 'beta',
-    platform: 'web',
-    appUrl: `${ORIGINE}/mister-beta/?x="y"&z=<w>`,
-    repoUrl: 'https://github.com/exemple/mister-beta',
-  },
-  {
-    id: 'mister-bureau',
-    name: 'Mister Bureau',
-    description: 'Une application de bureau.',
-    category: 'outils',
-    maturity: 'alpha',
-    platform: 'desktop',
-    appUrl: 'https://github.com/exemple/mister-bureau',
-    repoUrl: 'https://github.com/exemple/mister-bureau',
-  },
-];
-
-const LIBELLES_FR = {
-  categories: { jeux: 'Jeux', outils: 'Outils', sante: 'Santé' },
-  maturity: { stable: 'Stable', beta: 'Bêta', alpha: 'Alpha' },
-};
-const LIBELLES_EN = {
-  categories: { jeux: 'Games', outils: 'Tools', sante: 'Health' },
-  maturity: { stable: 'Stable', beta: 'Beta', alpha: 'Alpha' },
-};
-
-const donnees = (surcharge = {}) => ({
-  origine: ORIGINE,
-  compte: 'exemple',
-  soi: 'exemple.github.io',
-  theme: '#2f4bd1',
-  sponsorUrl: 'https://buymeacoffee.com/exemple',
-  imageEmpreinte: '0a1b2c3d',
-  apps: APPS,
-  categories: ['jeux', 'outils', 'sante'],
-  libellesFr: LIBELLES_FR,
-  libellesEn: LIBELLES_EN,
-  descriptionsEn: { 'miss-alpha': 'Described <b>in English</b>.' },
-  pagesParApp: new Map([
-    [
-      'miss-alpha',
-      [
-        {
-          url: `${ORIGINE}/miss-alpha/regles.html`,
-          titre: `Règles <du> jeu ${PIEGE}`,
-          langue: 'fr',
-          alternates: {},
-        },
-      ],
-    ],
-    ['mister-beta', []],
-  ]),
-  imageParApp: new Map([['miss-alpha', `${ORIGINE}/miss-alpha/og-image.jpg`]]),
-  iconeParApp: new Map([['mister-beta', `${ORIGINE}/mister-beta/icon-192.png`]]),
-  enPanne: [],
-  pageDeBureau: new Map([
-    ['mister-bureau', { app: APPS[2], chemin: '/mister-bureau.html', version: null }],
-  ]),
-  coulisses: [
-    {
-      nom: 'le-socle',
-      base: `${ORIGINE}/le-socle/`,
-      plan: true,
-      estApp: false,
-      titre: 'Le <socle> "commun"',
-      desc: `Infrastructure ${PIEGE}`,
-    },
-  ],
-  pagesParSite: new Map(),
-  ...surcharge,
-});
+const donnees = donneesFactices;
 
 /** Le texte des éléments `<script>` exécutables (ni JSON-LD, ni module externe). */
 const scriptsEnLigne = html =>
