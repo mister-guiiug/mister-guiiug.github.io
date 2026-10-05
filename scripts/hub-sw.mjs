@@ -31,7 +31,7 @@
  */
 
 /** Le nom du cache. À changer à chaque modification du worker. */
-export const CACHE_HUB = 'hub-v5';
+export const CACHE_HUB = 'hub-v6';
 
 /** Le préfixe des caches du hub, et des seuls que ce worker ait le droit d'effacer. */
 export const PREFIXE_CACHE_HUB = 'hub-';
@@ -94,9 +94,13 @@ function estDuHub(url) {
  * La clé de cache, sans la requête : « /?q=dés » et « / » sont la même page,
  * et « /og-image.jpg?v=… » la même image. Sans ça, chaque filtre partagé par
  * lien ajouterait une copie de la page au cache.
+ *
+ * « /index.html » est « / » : l'adresse de lancement de l'app installée et
+ * l'adresse canonique servent la même page, rangée sous la seule clé « / ».
+ * Seule « / » est précachée ; lancée hors ligne, l'app la retrouve.
  */
 function cle(url) {
-  return url.origin + url.pathname;
+  return url.origin + (url.pathname === '/index.html' ? '/' : url.pathname);
 }
 
 self.addEventListener('install', event => {

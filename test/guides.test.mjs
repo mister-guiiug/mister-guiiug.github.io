@@ -102,7 +102,7 @@ test('entreeGuide : une traduction, le titre servi en français et l’autre lan
   assert.match(
     html,
     new RegExp(
-      `<a href="${B}regles-du-yahtzee\\.html" target="_blank" rel="noopener noreferrer" class="guide-titre" hreflang="fr" lang="fr" data-fr-href="${B}regles-du-yahtzee\\.html" data-en-href="${B}en/yahtzee-rules\\.html" data-fr-hreflang="fr" data-en-hreflang="en" data-fr-lang="fr" data-en-lang="en" data-fr="Règles du Yahtzee" data-en="Yahtzee rules">Règles du Yahtzee</a>`
+      `<a href="${B}regles-du-yahtzee\\.html" rel="noreferrer" data-hors-shell class="guide-titre" hreflang="fr" lang="fr" data-fr-href="${B}regles-du-yahtzee\\.html" data-en-href="${B}en/yahtzee-rules\\.html" data-fr-hreflang="fr" data-en-hreflang="en" data-fr-lang="fr" data-en-lang="en" data-fr="Règles du Yahtzee" data-en="Yahtzee rules">Règles du Yahtzee</a>`
     )
   );
   // L'autre langue : sous le titre, à côté de l'application, dans SA langue,
@@ -110,7 +110,7 @@ test('entreeGuide : une traduction, le titre servi en français et l’autre lan
   assert.match(
     html,
     new RegExp(
-      `class="guide-app">Miss Dice</a><span aria-hidden="true"> · </span><a href="${B}en/yahtzee-rules\\.html" target="_blank" rel="noopener noreferrer" class="guide-autre" hreflang="en" lang="en" data-fr-href="${B}en/yahtzee-rules\\.html" data-en-href="${B}regles-du-yahtzee\\.html" data-fr-hreflang="en" data-en-hreflang="fr" data-fr-lang="en" data-en-lang="fr"><span data-fr="Read in English" data-en="Lire en français">Read in English</span><span class="sr-only" data-fr=": Yahtzee rules" data-en=" : Règles du Yahtzee">: Yahtzee rules</span></a>`
+      `class="guide-app">Miss Dice</a><span aria-hidden="true"> · </span><a href="${B}en/yahtzee-rules\\.html" rel="noreferrer" data-hors-shell class="guide-autre" hreflang="en" lang="en" data-fr-href="${B}en/yahtzee-rules\\.html" data-en-href="${B}regles-du-yahtzee\\.html" data-fr-hreflang="en" data-en-hreflang="fr" data-fr-lang="en" data-en-lang="fr"><span data-fr="Read in English" data-en="Lire en français">Read in English</span><span class="sr-only" data-fr=": Yahtzee rules" data-en=" : Règles du Yahtzee">: Yahtzee rules</span></a>`
     )
   );
   // Aucune étiquette de langue : la traduction existe, rien à signaler.

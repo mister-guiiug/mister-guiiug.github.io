@@ -164,6 +164,69 @@ test('À propos : l’identifiant effacé au retrait ne se dit que là où le re
   }
 });
 
+test('À propos : une seule adresse pour toutes, effacer le site efface toutes les apps', () => {
+  const rendre = () =>
+    pageAPropos({
+      origine: ORIGINE,
+      compte: COMPTE,
+      imagePartage: IMAGE,
+      apps: APPS,
+      avecIssues: new Set(),
+      sponsorUrl: 'https://buymeacoffee.com/mister.guiiug',
+    });
+  const html = rendre();
+  assert.match(
+    html,
+    /servies à la même adresse, <code>mister-guiiug\.github\.io<\/code> : pour le navigateur, elles forment un seul site\./
+  );
+  assert.match(
+    html,
+    /efface donc celles de <strong>toutes<\/strong> les applications de la famille, réglages, saisies et connexions comprises/
+  );
+  assert.match(html, /les supprime, avec celles de toutes les applications de la famille/);
+  // La phrase de repli, pour une app qui n'offrirait pas le retrait, le dit aussi.
+  const retrait = RELEVE.retraitConsentement;
+  try {
+    RELEVE.retraitConsentement = retrait.filter(id => id !== 'miss-dice');
+    assert.match(
+      rendre(),
+      /Pour Miss Dice, il faut encore effacer les données du site dans le navigateur, ce qui efface aussi celles de toutes les applications de la famille, servies à la même adresse \(mister-guiiug\.github\.io\), connexions comprises\./
+    );
+  } finally {
+    RELEVE.retraitConsentement = retrait;
+  }
+});
+
+test('À propos : le choix est gardé par application, l’identifiant PostHog est commun', () => {
+  const rendre = () =>
+    pageAPropos({
+      origine: ORIGINE,
+      compte: COMPTE,
+      imagePartage: IMAGE,
+      apps: APPS,
+      avecIssues: new Set(),
+      sponsorUrl: 'https://buymeacoffee.com/mister.guiiug',
+    });
+  const html = rendre();
+  assert.match(html, /Le choix vaut pour l’application où il est fait : le retirer dans l’une ne le retire pas dans les autres\./);
+  assert.ok(
+    html.includes(
+      `L’identifiant de visite, lui, est commun aux applications qui mesurent : elles écrivent au même projet PostHog et le rangent sous le même nom, dans le stockage de mister-guiiug.github.io (relevé sur les sites publiés le ${RELEVE.dateProjetCommun}).`
+    )
+  );
+  assert.match(
+    html,
+    /Accepter dans deux applications, c’est y être le même visiteur ; un retrait efface cet identifiant du navigateur pour toutes, et une application où l’accord tient en crée un nouveau à sa prochaine ouverture\./
+  );
+  const commun = RELEVE.projetPostHogCommun;
+  try {
+    RELEVE.projetPostHogCommun = false;
+    assert.ok(!rendre().includes('est commun aux applications qui mesurent'), 'rien de relevé, rien d’affirmé');
+  } finally {
+    RELEVE.projetPostHogCommun = commun;
+  }
+});
+
 test('le relevé de l’identifiant effacé ne nomme que des applications qui offrent le retrait', () => {
   const avecRetrait = new Set(RELEVE.retraitConsentement);
   assert.deepEqual(

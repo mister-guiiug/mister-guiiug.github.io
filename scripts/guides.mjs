@@ -16,20 +16,17 @@
  * bascule de langue échange ensuite titres, adresses et `lang` à partir des
  * attributs `data-fr-*` / `data-en-*` que posent ces fonctions.
  */
+import { echappe } from './echappe.mjs';
 
 /** Les langues du hub, dans l'ordre où il les sert. */
 export const LANGUES = ['fr', 'en'];
 
-const echappe = texte =>
-  String(texte ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-
-/** Un lien hors du shell du hub : celui que `build-site.mjs` écrit aussi. */
+/**
+ * Un lien de la famille : sur place dans un onglet, hors du shell dans le hub
+ * installé (le script y pose target=_blank). Celui qu'écrit aussi accueil.mjs.
+ */
 const lien = (url, texte, attrs = '') =>
-  `<a href="${echappe(url)}" target="_blank" rel="noopener noreferrer"${attrs}>${texte}</a>`;
+  `<a href="${echappe(url)}" rel="noreferrer" data-hors-shell${attrs}>${texte}</a>`;
 
 /** Les attributs d'une balise, quel que soit leur ordre. */
 const attributsDe = balise =>

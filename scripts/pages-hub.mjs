@@ -17,7 +17,12 @@
  * `lastmod`, puis `dater` pose la date. La date affichée ne fait donc jamais
  * changer l'empreinte.
  */
+import { echappe as echappeHtml } from './echappe.mjs';
+import { CLAIR, JETONS_COMMUNS, SOMBRE, choisir, declarations } from './palette.mjs';
 import { jourAffiche } from './seo-hub.mjs';
+
+/** L'échappement du hub, sous le nom que `page-a-propos.mjs` importe d'ici. */
+export { echappeHtml };
 
 /** Les jetons de date, remplacés par `dater` après le calcul de l'empreinte. */
 export const JETONS = {
@@ -33,13 +38,6 @@ export function dater(texte, jour) {
     .replaceAll(JETONS.majEn, jourAffiche(jour, 'en'))
     .replaceAll(JETONS.majIso, jour);
 }
-
-export const echappeHtml = texte =>
-  String(texte ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 
 /** Un bloc JSON-LD sûr : un `</script>` dans une chaîne fermerait le bloc. */
 export const jsonLdTexte = objet => JSON.stringify(objet).replace(/</g, '\\u003c');
@@ -109,28 +107,17 @@ export function filJsonLd(url, etapes) {
 /**
  * Le style du hub, réduit à ce qu'une page de lecture demande : mêmes jetons de
  * couleur, mêmes polices, même fond. Le thème suit le système — sans script, la
- * préférence mémorisée par le hub n'est pas lisible ici.
+ * préférence mémorisée par le hub n'est pas lisible ici. Les jetons viennent de
+ * palette.mjs, la seule copie des palettes.
  */
 const STYLE = `
       :root {
         color-scheme: light dark;
-        --fond: #f7f8fc;
-        --fond-carte: #ffffff;
-        --texte: #1a1b26;
-        --doux: #55586b;
-        --bord: #d9dbe6;
-        --lien: #2f4bd1;
-        --barre: #eef0f7;
+${declarations(choisir(CLAIR, JETONS_COMMUNS), '        ')}
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --fond: #0f1220;
-          --fond-carte: #15192b;
-          --texte: #e8e9f2;
-          --doux: #a8abc2;
-          --bord: #2a2e45;
-          --lien: #9fb2ff;
-          --barre: #181c2e;
+${declarations(choisir(SOMBRE, JETONS_COMMUNS), '          ')}
         }
       }
       * {
@@ -160,7 +147,7 @@ const STYLE = `
         padding: 0.5rem 0.85rem;
         border-radius: 0.5rem;
         background: var(--lien);
-        color: #fff;
+        color: var(--fond);
         transform: translateY(-200%);
       }
       .evitement:focus {

@@ -121,6 +121,21 @@ export const RELEVE = {
    * (les morceaux de son précache). Sa date est à part, `dateOubli`.
    */
   dateOubli: '1er octobre 2026',
+  /**
+   * UN SEUL PROJET POSTHOG, SUR UNE SEULE ORIGINE. Les dix-huit applications qui
+   * mesurent portent la même clé de projet dans le code que sert leur site
+   * (relevé le 5 octobre 2026). PostHog range l'identifiant de visite
+   * (`ph_<clé>_posthog`) et sa mémoire du refus (`__ph_opt_in_out_<clé>`) sous
+   * des noms qui ne portent que cette clé : dans le stockage commun de
+   * l'origine, ils sont communs à toutes. Le CHOIX du visiteur, lui, est rangé
+   * application par application (`dwc_consent:/<app>/`, `appScopedKey` du
+   * socle) : un retrait coupe la mesure de l'application où il est fait, et
+   * efface l'identifiant commun ; une application où l'accord tient le
+   * rétablit à sa prochaine ouverture (`aligneApresChargement`, socle), avec
+   * un identifiant neuf.
+   */
+  dateProjetCommun: '5 octobre 2026',
+  projetPostHogCommun: true,
   oubliAuRetrait: [
     'miss-badminton',
     'miss-carbook',
@@ -232,7 +247,11 @@ export function pageAPropos({ origine, compte, imagePartage, apps, avecIssues, s
   const avecRetrait = choisir(RELEVE.retraitConsentement);
   const sansRetrait = RELEVE.posthog.filter(id => !RELEVE.retraitConsentement.includes(id));
   const retraitPartout = avecRetrait.length > 0 && choisir(sansRetrait).length === 0;
-  const effacer = 'effacer les données du site dans le navigateur, ce qui efface aussi celles que l’application garde sur l’appareil';
+  // UNE SEULE ORIGINE. Le navigateur range les données par adresse de site, et
+  // toutes les applications web de la famille sont servies sous la même : les
+  // effacer pour l'une les efface pour toutes, connexions comprises.
+  const hote = echappeHtml(new URL(origine).host);
+  const effacer = `effacer les données du site dans le navigateur, ce qui efface aussi celles de toutes les applications de la famille, servies à la même adresse (${hote}), connexions comprises`;
   // Effacer l'identifiant au retrait suppose un retrait : le relevé ne compte
   // que les applications qui l'offrent, et la phrase nomme celles qu'il a vues
   // tant qu'il ne les couvre pas toutes.
@@ -253,13 +272,22 @@ export function pageAPropos({ origine, compte, imagePartage, apps, avecIssues, s
         retraitPartout ? '' : ` Pour ${noms(sansRetrait)}, il faut encore ${effacer}.`
       }`
     : `Votre choix est gardé treize mois ; pour le revoir plus tôt, il faut ${effacer}.`;
+  // UN SEUL PROJET POSTHOG. Le choix est gardé par application ; l'identifiant
+  // de visite, lui, est commun (voir RELEVE.projetPostHogCommun).
+  const projetCommun = RELEVE.projetPostHogCommun
+    ? ` Le choix vaut pour l’application où il est fait : le retirer dans l’une ne le retire pas dans les autres. L’identifiant de visite, lui, est commun aux applications qui mesurent : elles écrivent au même projet PostHog et le rangent sous le même nom, dans le stockage de ${hote} (relevé sur les sites publiés le ${RELEVE.dateProjetCommun}). Accepter dans deux applications, c’est y être le même visiteur${
+        avecOubli.length
+          ? ` ; ${avecOubli.length === avecRetrait.length ? 'un retrait' : `chez ${enumere(avecOubli.map(a => echappeHtml(a.name)))}, un retrait`} efface cet identifiant du navigateur pour toutes, et une application où l’accord tient en crée un nouveau à sa prochaine ouverture`
+          : ''
+      }.`
+    : '';
 
   const { local, supabase, firebase, outils, bureau } = RELEVE.stockage;
   const sections = [];
   if (choisir(local).length) {
     sections.push(`
       <h3>Stockées sur l’appareil</h3>
-      <p>${liens(local)} gardent vos saisies dans le stockage de votre navigateur (<code>localStorage</code> ou IndexedDB), sur votre appareil, sans compte ni base de données en ligne. Effacer les données du site dans le navigateur les supprime. Ce qui sort malgré tout de l’appareil (services extérieurs, mesure d’audience, erreurs) est décrit plus bas.${aussi(
+      <p>${liens(local)} gardent vos saisies dans le stockage de votre navigateur (<code>localStorage</code> ou IndexedDB), sur votre appareil, sans compte ni base de données en ligne. Effacer les données du site dans le navigateur les supprime, avec celles de toutes les applications de la famille (voir plus haut). Ce qui sort malgré tout de l’appareil (services extérieurs, mesure d’audience, erreurs) est décrit plus bas.${aussi(
         ['mister-molkky'],
         ` Mister Mölkky propose deux options qui passent par Supabase : la synchronisation, sous une identité anonyme, et le mode direct, dont la partie diffusée, noms des joueurs compris, est publique — son code à six caractères ne la protège pas.`
       )}</p>`);
@@ -373,6 +401,7 @@ export function pageAPropos({ origine, compte, imagePartage, apps, avecIssues, s
 
       <h2 id="donnees">Vos données, selon le type d’application</h2>
       <p>Ce qu’une application fait de vos données dépend de l’endroit où elle les range. Relevé dans le code des applications publiées le ${RELEVE.date}.</p>
+      <p id="meme-adresse">Les applications web de la famille sont toutes servies à la même adresse, <code>${hote}</code> : pour le navigateur, elles forment un seul site. Effacer les données de ce site efface donc celles de <strong>toutes</strong> les applications de la famille, réglages, saisies et connexions comprises, pas seulement celles de l’application visée.</p>
 ${sections.join('\n')}${
     services.length
       ? `
@@ -388,7 +417,7 @@ ${sections.join('\n')}${
       <p>${parmiLeWeb(RELEVE.posthog)} affichent un bandeau de consentement : tant que vous n’avez pas choisi « Accepter », rien n’est chargé ni envoyé. Si vous acceptez, <a href="https://posthog.com/">PostHog</a>, sur ses serveurs européens, reçoit les pages vues et quelques événements d’usage (une partie lancée, un export…)${aussi(
         ['miss-contraction'],
         ', et, pour Miss Contraction, des mesures de vitesse de la page'
-      )}, sans cookie : son identifiant reste dans le stockage du navigateur. Ni enregistrement des sessions, ni capture automatique des clics. ${revoirSonChoix}</p>
+      )}, sans cookie : son identifiant reste dans le stockage du navigateur. Ni enregistrement des sessions, ni capture automatique des clics. ${revoirSonChoix}${projetCommun}</p>
 
       <h3>Remontée d’erreurs : Sentry, dès l’ouverture</h3>
       <p>${parmiLeWeb(RELEVE.sentry)} démarrent <a href="https://sentry.io/">Sentry</a> à l’ouverture, sans consentement préalable, sur ses serveurs situés en Allemagne. Quand une erreur survient, Sentry reçoit un rapport technique : le message et la pile d’appels, la page, le navigateur, et le fil des dernières actions (clics, navigation, requêtes réseau avec leur adresse, messages de la console) ; comme tout envoi, il porte l’adresse IP du navigateur.${aussi(

@@ -57,7 +57,11 @@ avec leur titre (`<h1>`) pour ancre, groupées par catégorie ; celle du
 squelette y figure aussi. Chaque carte affiche une miniature de l'**image de
 partage** de l'app (`og-image.jpg`, 1200×630), sondée à la construction puis
 réduite à 640 px en JPEG et en WebP dans `previews/`, avec un `alt` qui la
-décrit ; absente, la carte montre l'initiale de l'app. L'image de partage de la
+décrit. Les miniatures sont écrites avant le rendu, qui ne propose que ce qui
+l'a été (le WebP exige sharp, voir plus bas) ; sans miniature, la carte montre
+l'icône de l'app, lue dans son manifeste, puis son initiale. Sur mobile (sous
+40rem), les cartes passent en liste compacte : l'icône, le nom, une ligne de
+description et « Ouvrir ». L'image de partage de la
 racine reste versionnée ici : `static/og-image.jpg`, la mosaïque des icônes du
 catalogue.
 
@@ -76,23 +80,43 @@ L'éditeur est une seule entité JSON-LD, `https://mister-guiiug.github.io/#org`
 pages.
 
 Le hub est lui-même **installable** (manifest + service worker + icônes
-192/512) : sur Android Chrome, menu ⋮ → « Installer l'application ». Les liens
-vers les apps s'ouvrent hors du shell du catalogue, pour que chaque PWA reste
-installable séparément (même origine `github.io`).
+192/512) : sur Android Chrome, menu ⋮ → « Installer l'application ». Dans un
+onglet, un lien vers une app ou un guide s'ouvre sur place, comme tout lien.
+Dans le hub **installé** seulement, le script les ouvre hors du shell
+(`target=_blank`, annoncé « nouvel onglet » pour l'oreille), pour que chaque
+PWA reste installable séparément (même origine `github.io`).
 
 **Son service worker ne touche qu'au hub** (`scripts/hub-sw.mjs`). Servi depuis
 `/sw.js`, il a pour portée toute l'origine, apps comprises. Il ne supprime donc
 que ses propres caches (`hub-*`), et ne répond qu'aux fichiers de premier
 niveau du hub et à `/previews/`. Tout ce qui est sous `/<app>/`, et toute autre
 origine, passe sans lui. Jusqu'à `hub-v4`, il vidait le précache Workbox des
-apps à chaque activation.
+apps à chaque activation. Il ne précache que `/` : `/index.html`, adresse de
+lancement de l'app installée, est rangée sous la même clé.
 
 Le `<title>` reste le titre long : le titre court « GuiiuG » ne s'affiche que
 dans la fenêtre de l'app installée, et jamais pour un robot.
 
 La page propose un bascule **FR / EN** (catégories et maturités du socle,
-descriptions EN locales au hub) et un thème **clair / sombre / système**,
-mémorisés dans `localStorage`.
+descriptions EN locales au hub, `scripts/descriptions-en.mjs`) et un thème
+**clair / sombre / système**, mémorisés dans `localStorage`. Une app née au
+catalogue sans description anglaise garde la française, marquée `lang="fr"`,
+et la construction la nomme dans un `::warning::`. Les palettes vivent dans
+`scripts/palette.mjs`, écrites une fois.
+
+**Une politique de sécurité du contenu**, en `<meta>`, est calculée à chaque
+construction (`scripts/csp.mjs`) : l'empreinte SHA-256 de chaque script et de
+chaque style écrits dans la page, l'adresse exacte des seuls fichiers
+autorisés (worker, manifeste, module Ctrl+K), et `'none'` pour tout le reste.
+`'self'` y autoriserait les scripts des vingt apps servies sous la même
+origine.
+
+**La recherche Ctrl+K** vient du module `command.js` du socle, lu à la même
+étiquette publiée que le catalogue, et nulle part ailleurs : ni sur `main`, ni
+dans une copie locale, sauf demande explicite (`HUB_SOCLE_LOCAL=1`, qui lit
+`../dev-pwa-config/command.js`). Absent à l'étiquette, l'accueil se construit
+sans le raccourci (ni module, ni indication « Ctrl K ») et un `::warning::` le
+dit ; il revient de lui-même à la première version du socle qui le livre.
 
 **Les guides suivent la langue choisie** (`scripts/guides.mjs`). Chaque page de
 contenu déclare sa traduction (`<link rel="alternate" hreflang>`, posé par le
@@ -111,7 +135,8 @@ comprises : aucune ne perd le seul lien qui la relie à l'origine.
 engendre la page et ses fichiers (`index.html`, `a-propos.html`,
 `mister-quota.html`, `404.html`, `robots.txt`, `sitemap.xml`,
 `sitemap-hub.xml`, `seo-state.json`, manifeste, service worker, page hors
-ligne, vérifications Google et Bing, clé IndexNow, miniatures, icônes) au
+ligne, vérifications Google et Bing, clé IndexNow, miniatures, icônes, et
+`command.js` avec `hub-command.js` quand le socle publie le raccourci) au
 moment de publier et les téléverse comme artefact Pages — aucun `git push`,
 donc la protection de `main` reste entière.
 
@@ -138,19 +163,40 @@ construit sans publier.
 construction continue : la carte porte un badge « Non vérifiée », un bandeau
 l’explique, et le hub reste à jour pour les autres. `HUB_STRICT=1` (ou
 `--strict`) restaure l’ancien fail-safe total (rien n’est déployé). Le repli
-visuel d’une carte sans `og-image` est son `icon-192.png`, puis un monogramme.
+visuel d’une carte sans `og-image` est l'icône de son manifeste (à défaut,
+`icon-192.png`), puis un monogramme.
 
 ## Construire en local
 
 ```bash
-node --test test/*.test.mjs   # sans réseau : worker, plans de site, robots.txt, pages
+node --test test/*.test.mjs   # sans réseau : accueil rendu sur un catalogue factice,
+                              # politique de sécurité, worker, plans de site, pages
 node scripts/build-site.mjs _site
 ```
 
-Aucune dépendance obligatoire : Node et le réseau suffisent. Pour des miniatures
-identiques à celles de la CI (640 px, JPEG et WebP), installer d'abord sharp
-(`npm install --no-save sharp@0.34.4`) ; sans lui, les images sont recopiées en
-taille réelle et aucun WebP n'est produit. Un `GITHUB_TOKEN` (ou `GH_TOKEN`)
-dans l'environnement relève la limite de l'API, mais ses trois requêtes passent
-sans. La construction relit aussi `seo-state.json` en ligne : sans réseau vers
+La construction a trois couches : `scripts/collecte.mjs` lit le réseau (en
+parallèle, huit requêtes au plus en vol), `scripts/accueil.mjs` rend l'accueil
+sans réseau (`rendreAccueil`, que les tests appellent), et
+`scripts/accueil/hub.css` et `scripts/accueil/hub-client.js` sont la feuille
+de style et le script insérés dans la page. `build-site.mjs` orchestre.
+
+Aucune dépendance obligatoire : Node et le réseau suffisent. **Les miniatures
+WebP exigent sharp** : pour des miniatures identiques à celles de la CI (640 px,
+JPEG et WebP), installer d'abord sharp à la même version
+(`npm install --no-save --ignore-scripts sharp@0.34.4`). Sans lui, les images
+sont recopiées en taille réelle, en JPEG seulement, et les cartes ne proposent
+aucune source WebP. Un `GITHUB_TOKEN` (ou `GH_TOKEN`) dans l'environnement
+relève la limite de l'API, mais ses trois requêtes passent sans ; la
+construction le retire de son environnement avant d'exécuter les modules du
+catalogue.
+
+Pour **voir une construction** ailleurs qu'à la racine de l'origine,
+`HUB_APERCU=<adresse>` réécrit vers cette adresse les fichiers du hub
+(miniatures, icônes, manifeste, worker), politique de sécurité comprise ; les
+liens vers les apps restent ceux de l'origine :
+
+```bash
+HUB_APERCU=http://localhost:8080 node scripts/build-site.mjs /tmp/apercu
+# puis servir /tmp/apercu à la racine de http://localhost:8080
+``` La construction relit aussi `seo-state.json` en ligne : sans réseau vers
 l'origine, les pages du hub sont datées du jour, sans échec. Le dossier `_site/` est ignoré par git.
