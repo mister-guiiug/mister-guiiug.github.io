@@ -11,10 +11,16 @@
 # ce dépôt : le catalogue du socle (une application naît à chaque version) et
 # la liste des sites publiés (un plan de site apparaît).
 #
-# ÉCHOUER EST SÛR : si la construction échoue — une application ne répond pas,
-# le réseau hoquette —, rien n'est déployé et Pages continue de servir la
-# version précédente. Le job de construction tourne aussi sur les PR, comme
-# vérification, sans publier.
+# ÉCHOUER EST SÛR : si la construction échoue (API GitHub ou socle
+# injoignables, catalogue illisible), rien n'est déployé et Pages continue de
+# servir la version précédente. Le job de construction tourne aussi sur les PR,
+# comme vérification, sans publier.
+#
+# UNE APPLICATION QUI NE RÉPOND PAS NE FAIT PLUS ÉCHOUER LA CONSTRUCTION, depuis
+# #32 : publication partielle, sa carte porte « Non vérifiée » et un bandeau
+# l'explique. HUB_STRICT=1 (ou --strict) rétablit l'échec. Le module Ctrl+K du
+# socle, absent à l'étiquette publiée, ne la fait pas échouer non plus : la
+# page se publie sans le raccourci, avec un avertissement.
 #
 # UNE NUIT SANS CHANGEMENT NE SIGNALE RIEN. Les pages du hub sont datées par
 # l'empreinte de leur contenu (`seo-state.json`, relu en ligne à chaque
@@ -67,8 +73,9 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      # Sans réseau, avant tout : le service worker (qui ne doit toucher qu'au
-      # hub), les plans de site, les dates, le robots.txt et les pages statiques.
+      # Sans réseau, avant tout : l'accueil rendu sur un catalogue factice et sa
+      # politique de sécurité, le service worker (qui ne doit toucher qu'au hub),
+      # les plans de site, les dates, le robots.txt et les pages statiques.
       - name: Tests
         run: node --test test/*.test.mjs
 
