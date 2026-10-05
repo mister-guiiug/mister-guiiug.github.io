@@ -87,3 +87,53 @@ test('accueil : structure, une section par catégorie peuplée, une carte par ap
   // Les dates restent des jetons : `dater` les pose après le calcul de l'empreinte.
   assert.ok(html.includes(JETONS.majFr));
 });
+
+test('accueil : un h1 qui dit ce qu’est la page, la marque restant visible', () => {
+  const { html } = rendreAccueil(donnees());
+  const h1 = [...html.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/g)].map(m => m[1]);
+  assert.deepEqual(h1, ['Les applications de exemple']);
+  assert.match(html, /<p class="marque" data-i18n="marque">GuiiuG<\/p>/);
+  const libelles = JSON.parse(/var I18N = (.*);\n/.exec(html)[1]);
+  assert.equal(libelles.fr.titre, 'Les applications de exemple');
+  assert.equal(libelles.en.titre, 'Apps by exemple');
+});
+
+test('accueil : deux groupes de préférences, deux légendes distinctes', () => {
+  const { html } = rendreAccueil(donnees());
+  const legendes = [...html.matchAll(/<legend data-i18n="([^"]+)">([^<]*)<\/legend>/g)].map(m => [m[1], m[2]]);
+  assert.deepEqual(legendes, [
+    ['langue', 'Langue'],
+    ['themeLegende', 'Thème'],
+  ]);
+  const libelles = JSON.parse(/var I18N = (.*);\n/.exec(html)[1]);
+  assert.equal(libelles.en.langue, 'Language');
+  assert.equal(libelles.en.themeLegende, 'Theme');
+});
+
+test('accueil : recherche et filtres dans un repère, barre collante enfant de body', () => {
+  const { html } = rendreAccueil(donnees());
+  assert.ok(!html.includes('chrome-slot'), 'l’enveloppe qui empêchait la barre de coller est revenue');
+  // Le repère <search> suit l'en-tête, au niveau de <body>, et contient la
+  // recherche, les catégories et les filtres.
+  const recherche = /\n    <\/header>\n\n    <search class="collant" id="collant"[^>]*>([\s\S]*?)\n    <\/search>\n/.exec(html)?.[1];
+  assert.ok(recherche, 'la barre n’est pas enfant direct de <body>, juste après l’en-tête');
+  for (const motif of [/id="filtre"/, /id="filtres-toggle"/, /class="sommaire"/, /id="filtres-panel"/]) {
+    assert.match(recherche, motif);
+  }
+  assert.match(recherche, /aria-controls="sommaire-wrap filtres-panel"/);
+  // Le décompte et l'état vide sont dans <main>, plus entre deux repères.
+  const main = /<main id="catalogue">([\s\S]*?)<\/main>/.exec(html)[1];
+  assert.match(main, /<p class="compte" id="compte"[^>]*aria-live="polite"/);
+  assert.match(main, /<div class="vide" id="filtre-vide"/);
+  assert.ok(!html.includes('class="parcours"'));
+});
+
+test('accueil : le bandeau de publication partielle porte son texte dans le HTML servi', () => {
+  const sans = rendreAccueil(donnees()).html;
+  assert.ok(!sans.includes('bandeau-panne"'), 'pas de bandeau sans panne');
+  const { html } = rendreAccueil(donnees({ enPanne: ['mister-beta (503)'] }));
+  const bandeau = /<p class="bandeau-panne" role="status" data-i18n="bandeauPanne">([^<]*)<\/p>/.exec(html)?.[1];
+  assert.ok(bandeau && bandeau.length > 20, `bandeau vide : ${JSON.stringify(bandeau)}`);
+  assert.match(bandeau, /^Certaines applications du catalogue ne répondent pas/);
+  assert.match(html, /<span class="badge badge-panne" data-i18n="badgePanne">Non vérifiée<\/span>/);
+});

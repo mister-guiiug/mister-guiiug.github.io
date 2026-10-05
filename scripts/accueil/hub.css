@@ -118,28 +118,52 @@ html[data-theme='system'] body {
 .skip:focus {
   transform: translateY(0);
 }
-.chrome-slot {
-  min-height: var(--chrome-h, 0px);
+/*
+ * LA BARRE COLLANTE : recherche et filtres, rien d'autre. Elle est enfant
+ * direct de <body> : une enveloppe de sa propre hauteur, posée le 27/09/2026,
+ * l'empêchait de coller, un élément sticky ne sortant pas de son parent.
+ * Sa hauteur, mesurée par le script, est réservée en haut de chaque
+ * défilement : ni l'élément qui reçoit le focus ni la cible d'une ancre ne
+ * passent sous elle (WCAG 2.4.11).
+ */
+html {
+  scroll-padding-top: calc(var(--collant-h, 0px) + 0.75rem);
 }
-.chrome {
+.entete {
+  margin: 0 0 1rem;
+}
+.collant {
+  display: block;
   position: sticky;
   top: 0;
   z-index: 20;
-  margin: 0 0 1.25rem;
-  padding: 0.4rem 1rem 0.75rem;
+  margin: 0 0 1rem;
+  padding: 0.55rem 1rem 0.6rem;
   background: var(--chrome);
   border-bottom: 1px solid color-mix(in srgb, var(--bord) 70%, transparent);
   transition: transform 0.2s ease;
 }
-.chrome.is-hidden {
+.collant.is-hidden {
   transform: translateY(calc(-100% - 1px));
 }
 @supports ((-webkit-backdrop-filter: blur(10px)) or (backdrop-filter: blur(10px))) {
-  .chrome {
+  .collant {
     background: color-mix(in srgb, var(--chrome) 88%, transparent);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
   }
+}
+.collant-ligne {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.collant-ligne .filtre {
+  flex: 1 1 auto;
+}
+.collant .sommaire-wrap {
+  margin-top: 0.5rem;
 }
 .topbar {
   display: flex;
@@ -228,11 +252,12 @@ html[data-theme='system'] body {
   outline: 3px solid var(--lien);
   outline-offset: 2px;
 }
-.hero {
+.hero-actions {
   display: flex;
-  gap: 1rem;
-  align-items: flex-start;
-  margin: 0 0 1.35rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
 }
 .hero-icone {
   width: 2.75rem;
@@ -252,14 +277,12 @@ html[data-theme='system'] body {
   line-height: 1.05;
   margin: 0;
 }
-.sous-titre {
-  margin: 0.12rem 0 0;
-  color: var(--doux);
-  font-size: 0.92rem;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.titre {
+  margin: 0.15rem 0 0;
+  color: var(--texte);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.3;
 }
 .chapeau {
   color: var(--doux);
@@ -276,7 +299,7 @@ html[data-theme='system'] body {
 .installer {
   display: none;
   appearance: none;
-  margin: 0 0 0.25rem;
+  margin: 0;
   padding: 0.5rem 0.95rem;
   border: 1px solid color-mix(in srgb, var(--lien) 40%, var(--bord));
   border-radius: 999px;
@@ -289,16 +312,11 @@ html[data-theme='system'] body {
 .installer[data-visible='1'] {
   display: inline-flex;
 }
-.outils {
-  display: grid;
-  gap: 0.65rem;
-  min-width: 0;
-}
 .filtre {
   position: relative;
   display: block;
   min-width: 0;
-  margin: 0 0 0.75rem;
+  margin: 0;
 }
 .filtre-ico {
   position: absolute;
@@ -414,7 +432,7 @@ html[data-mod='meta'] .filtre-kbd [data-mod='meta'] {
   color: var(--lien);
 }
 .compte {
-  margin: 0;
+  margin: 0 0 0.25rem;
   color: var(--doux);
   font-size: 0.85rem;
 }
@@ -531,7 +549,6 @@ h2 {
   letter-spacing: 0.05em;
   color: var(--doux);
   margin: 2.25rem 0 0.9rem;
-  scroll-margin-top: 9rem;
 }
 ul {
   list-style: none;
@@ -858,15 +875,6 @@ main > section[data-cat-section] {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.parcours {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 0 0 1.25rem;
-}
-.parcours .chip-link {
-  text-decoration: none;
-}
 .guides {
   margin-top: 3rem;
 }
@@ -984,15 +992,6 @@ footer p:last-child {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.outils-ligne {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  min-width: 0;
-}
-.outils-ligne .sommaire-wrap {
-  flex: 1 1 auto;
-}
 .filtres-toggle {
   display: inline-flex;
   align-items: center;
@@ -1049,12 +1048,12 @@ footer p:last-child {
 .filtres-panel {
   display: grid;
   grid-template-rows: 0fr;
-  margin-top: -0.65rem;
+  margin-top: 0;
   transition: grid-template-rows 0.22s ease, margin-top 0.22s ease;
 }
 .filtres-panel.is-open {
   grid-template-rows: 1fr;
-  margin-top: 0;
+  margin-top: 0.55rem;
 }
 .filtres-panel-inner {
   overflow: hidden;
@@ -1138,7 +1137,7 @@ footer p:last-child {
     opacity: 1;
     transition: none;
   }
-  .chrome,
+  .collant,
   .filtres-panel {
     transition: none;
   }
@@ -1177,10 +1176,17 @@ footer p:last-child {
   animation-duration: 0.28s;
 }
 @media (max-width: 40rem) {
-  .hero {
-    flex-direction: column;
-    align-items: center;
+  .hero-texte {
     text-align: center;
+  }
+  .hero-actions {
+    justify-content: center;
+  }
+  .collant .sommaire-wrap {
+    display: none;
+  }
+  .collant.filtres-ouverts .sommaire-wrap {
+    display: block;
   }
   .chapeau,
   .confiance {
@@ -1203,9 +1209,6 @@ footer p:last-child {
   }
   .topbar {
     flex-wrap: wrap;
-  }
-  .filtre {
-    flex: 1 1 100%;
   }
   .filtre-kbd {
     display: none;

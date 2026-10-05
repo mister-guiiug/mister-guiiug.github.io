@@ -413,7 +413,8 @@ const confianceFr =
   "Open source et gratuites, installables sans passer par un magasin d'applications.";
 const confianceEn = 'Open source and free, installable without going through an app store.';
 
-const i18nClient = ctx => {
+/** Les libellés du script client, en français et en anglais. */
+const libellesClient = ctx => {
   const {
     compte,
     titrePage,
@@ -427,12 +428,12 @@ const i18nClient = ctx => {
     libellesFr,
     libellesEn,
   } = ctx;
-  return JSON.stringify({
+  return {
     fr: {
       title: titrePage,
       description,
       marque: 'GuiiuG',
-      sousTitre: `Les applications de ${compte}`,
+      titre: `Les applications de ${compte}`,
       chapeau:
         "Des applications web à installer depuis le navigateur. Pas de magasin, et la plupart restent utilisables hors ligne.",
       chapeauPwa:
@@ -451,7 +452,9 @@ const i18nClient = ctx => {
       themeLight: 'Clair',
       themeDark: 'Sombre',
       themeSystem: 'Système',
-      prefs: 'Langue et thème',
+      langue: 'Langue',
+      themeLegende: 'Thème',
+      recherche: 'Recherche et filtres',
       filtre: 'Rechercher une application',
       filtrePh: 'Rechercher…',
       sites: 'Pages du parc',
@@ -503,7 +506,7 @@ const i18nClient = ctx => {
       title: titrePageEn,
       description: descriptionEn,
       marque: 'GuiiuG',
-      sousTitre: `Apps by ${compte}`,
+      titre: `Apps by ${compte}`,
       chapeau:
         'Web apps you install from the browser. No app store, and most keep working offline.',
       chapeauPwa:
@@ -522,7 +525,9 @@ const i18nClient = ctx => {
       themeLight: 'Light',
       themeDark: 'Dark',
       themeSystem: 'System',
-      prefs: 'Language and theme',
+      langue: 'Language',
+      themeLegende: 'Theme',
+      recherche: 'Search and filters',
       filtre: 'Search apps',
       filtrePh: 'Search…',
       sites: 'Family pages',
@@ -572,7 +577,7 @@ const i18nClient = ctx => {
       categories: libellesEn.categories,
       maturity: libellesEn.maturity,
     },
-  }).replace(/</g, '\\u003c');
+  };
 };
 
 /**
@@ -652,15 +657,16 @@ export function rendreAccueil(donnees) {
   const description = descriptionFr(compte, apps);
   const descriptionEn = descriptionAnglaise(compte, apps);
 
-  // Bing SEO/GEO : titre ≥ 50 car. Le H1 visible est la marque ; le <title> reste
-  // descriptif, et le reste une fois la page rendue (voir `appliqueTitre`).
+  // Bing SEO/GEO : titre ≥ 50 car. Le <title> reste descriptif, et le reste une
+  // fois la page rendue (voir `appliqueTitre`). Le h1 dit lui aussi ce qu'est la
+  // page ; la marque, « GuiiuG », reste visible au-dessus de lui.
   const titrePage = `Les applications de ${compte} - PWA web installables hors magasin`;
   const titrePageEn = `${compte}'s apps - installable PWAs, no app store`;
 
   const nbApps = apps.length;
   const nbCats = catsAvecApps.length;
 
-  const i18nJson = i18nClient({
+  const libelles = libellesClient({
     ...ctx,
     titrePage,
     titrePageEn,
@@ -671,6 +677,7 @@ export function rendreAccueil(donnees) {
     plusieursLangues,
     languesGuides,
   });
+  const i18nJson = JSON.stringify(libelles).replace(/</g, '\\u003c');
 
   const script = indente(
     [
@@ -697,6 +704,7 @@ export function rendreAccueil(donnees) {
     guidesHtml,
     nbGuides,
     majFr,
+    bandeauPanne: libelles.fr.bandeauPanne,
     css: indente(CSS, 6),
     script,
   });
@@ -712,7 +720,6 @@ function pageHtml(ctx) {
     theme,
     sponsorUrl,
     imageEmpreinte,
-    libellesFr,
     enPanne,
     coulisses,
     titrePage,
@@ -728,6 +735,7 @@ function pageHtml(ctx) {
     guidesHtml,
     nbGuides,
     majFr,
+    bandeauPanne,
     css,
     script,
     raccourci,
@@ -789,8 +797,7 @@ ${css}
   <body>
     <a class="skip" href="#catalogue" data-i18n="skip">Aller aux applications</a>
 
-    <div class="chrome-slot" id="chrome-slot">
-    <div class="chrome" id="chrome">
+    <header class="entete">
       <div class="topbar">
         <div class="identite">
           <img
@@ -802,13 +809,13 @@ ${css}
             decoding="async"
           />
           <div class="identite-texte">
-            <h1 class="marque" data-i18n="marque">GuiiuG</h1>
-            <p class="sous-titre" data-i18n="sousTitre">Les applications de ${compte}</p>
+            <p class="marque" data-i18n="marque">GuiiuG</p>
+            <h1 class="titre" data-i18n="titre">Les applications de ${compte}</h1>
           </div>
         </div>
-        <div class="prefs" role="group" data-i18n-aria="prefs" aria-label="Langue et thème">
+        <div class="prefs">
           <fieldset>
-            <legend data-i18n="prefs">Langue et thème</legend>
+            <legend data-i18n="langue">Langue</legend>
             <button type="button" data-set-lang="fr" data-i18n-aria="langFr" aria-label="Français" aria-pressed="true" title="Français">
               <span class="drapeau" aria-hidden="true">🇫🇷</span>
             </button>
@@ -817,7 +824,7 @@ ${css}
             </button>
           </fieldset>
           <fieldset>
-            <legend data-i18n="prefs">Langue et thème</legend>
+            <legend data-i18n="themeLegende">Thème</legend>
             <button type="button" data-set-theme="light" data-i18n-aria="themeLight" aria-label="Clair" aria-pressed="false" title="Clair">
               <span class="ico" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
@@ -844,7 +851,25 @@ ${css}
         <a href="${origine}/parc-dashboard/" data-i18n="siteParc">Parc</a>
       </nav>
 
-      <label class="filtre${raccourci ? ' filtre-raccourci' : ''}">
+      <div class="hero-texte">
+        <p class="chapeau" id="chapeau" data-i18n="chapeau" data-i18n-pwa="chapeauPwa">
+          Des applications web à installer depuis le navigateur. Pas de magasin, et la plupart restent utilisables hors ligne.
+        </p>
+        <button type="button" class="chapeau-plus" id="chapeau-plus" data-i18n="enSavoirPlus" aria-expanded="false" aria-controls="chapeau">En savoir plus</button>
+        <p class="confiance" data-i18n="confiance">
+          ${echappe(confianceFr)}
+        </p>
+        <p class="hero-actions">
+          <button type="button" class="chip" id="hasard" data-i18n="hasard">Au hasard</button>
+          <button type="button" class="installer" id="installer" data-i18n="installer" hidden>Installer le catalogue</button>
+        </p>
+      </div>
+${featuredHtml}
+    </header>
+
+    <search class="collant" id="collant" data-i18n-aria="recherche" aria-label="Recherche et filtres">
+      <div class="collant-ligne">
+        <label class="filtre${raccourci ? ' filtre-raccourci' : ''}">
           <span class="sr-only" data-i18n="filtre">Rechercher une application</span>
           <span class="filtre-ico" aria-hidden="true">
             <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>
@@ -864,25 +889,22 @@ ${css}
             <span data-mod="meta">⌘</span>
             <span>K</span>
           </kbd>` : ''}
-      </label>
-
-      <div class="outils">
-        <div class="outils-ligne">
-        <button type="button" class="filtres-toggle" id="filtres-toggle" aria-expanded="false" aria-controls="filtres-panel">
+        </label>
+        <button type="button" class="filtres-toggle" id="filtres-toggle" aria-expanded="false" aria-controls="sommaire-wrap filtres-panel">
           <span class="ico" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M4 5h16l-6.2 7.2V19l-3.6 2v-8.8z"/></svg>
           </span>
           <span data-i18n="filtresPlus">Filtres</span>
           <span class="filtres-badge" id="filtres-badge"></span>
         </button>
-        <div class="sommaire-wrap" id="sommaire-wrap">
-          <nav class="sommaire" data-i18n-aria="nav" aria-label="Catégories">
+      </div>
+      <div class="sommaire-wrap" id="sommaire-wrap">
+        <nav class="sommaire" data-i18n-aria="nav" aria-label="Catégories">
 ${navCats}
-          </nav>
-        </div>
-        </div>
-        <div class="filtres-panel" id="filtres-panel" inert>
-          <div class="filtres-panel-inner">
+        </nav>
+      </div>
+      <div class="filtres-panel" id="filtres-panel" inert>
+        <div class="filtres-panel-inner">
           <div class="maturite" role="group" data-i18n-aria="maturiteFiltre" aria-label="Maturité">
             <span class="rail-label" aria-hidden="true" data-i18n="maturiteFiltre">Maturité</span>
             <button type="button" class="chip" data-maturity-filter="" aria-pressed="true" data-i18n="maturiteTous">Toutes</button>
@@ -901,45 +923,23 @@ ${navCats}
             <button type="button" class="chip" data-sort="stable" aria-pressed="true" data-i18n="triStable">Stables d’abord</button>
             <button type="button" class="chip" data-sort="az" aria-pressed="false" data-i18n="triAz">A–Z</button>
           </div>
-          </div>
         </div>
-        <p class="compte" id="compte" data-i18n="compte" aria-live="polite">${nbApps} applications · ${nbCats} catégories</p>
       </div>
-    </div>
-    </div>
-
-    <header class="hero">
-      <div class="hero-texte">
-        <p class="chapeau" id="chapeau" data-i18n="chapeau" data-i18n-pwa="chapeauPwa">
-          Des applications web à installer depuis le navigateur. Pas de magasin, et la plupart restent utilisables hors ligne.
-        </p>
-        <button type="button" class="chapeau-plus" id="chapeau-plus" data-i18n="enSavoirPlus" aria-expanded="false" aria-controls="chapeau">En savoir plus</button>
-        <p class="confiance" data-i18n="confiance">
-          ${echappe(confianceFr)}
-        </p>
-        <button type="button" class="installer" id="installer" data-i18n="installer" hidden>Installer le catalogue</button>
-      </div>
-    </header>
-
-${featuredHtml}
-
-    <p class="parcours">
-      <button type="button" class="chip" id="hasard" data-i18n="hasard">Au hasard</button>
-    </p>
-
-    <div class="vide" id="filtre-vide" role="status">
-      <p data-i18n="filtreVide">Aucune application ne correspond.</p>
-      <button type="button" class="vide-effacer" id="filtre-effacer" data-i18n="filtreEffacer">Effacer le filtre</button>
-      <p class="vide-suggestions-label" data-i18n="filtreSuggestions">Essayer une catégorie</p>
-      <div class="vide-suggestions">
-${videSuggestions}
-      </div>
-    </div>
+    </search>
 
     <main id="catalogue">
+      <p class="compte" id="compte" data-i18n="compte" aria-live="polite">${nbApps} applications · ${nbCats} catégories</p>
+      <div class="vide" id="filtre-vide" role="status">
+        <p data-i18n="filtreVide">Aucune application ne correspond.</p>
+        <button type="button" class="vide-effacer" id="filtre-effacer" data-i18n="filtreEffacer">Effacer le filtre</button>
+        <p class="vide-suggestions-label" data-i18n="filtreSuggestions">Essayer une catégorie</p>
+        <div class="vide-suggestions">
+${videSuggestions}
+        </div>
+      </div>
 ${
   enPanne.length
-    ? `      <p class="bandeau-panne" role="status" data-i18n="bandeauPanne">${echappe(libellesFr.bandeauPanne)}</p>\n`
+    ? `      <p class="bandeau-panne" role="status" data-i18n="bandeauPanne">${echappe(bandeauPanne)}</p>\n`
     : ''
 }${sections.join('\n\n')}
 ${guidesHtml}
