@@ -4,8 +4,15 @@
  * Le catalogue du socle et ses libellés, à la dernière version publiée ; la
  * liste des dépôts publics du compte ; les sondes des sites publiés (accueil,
  * plan de site, pages de contenu, image de partage, icône) ; la dernière
- * version des applications de bureau. Ce module ne rend rien : il rend des
- * données, que `accueil.mjs` met en page sans réseau.
+ * version des applications de bureau ; le module `command.js` du socle. Ce
+ * module ne rend rien : il rend des données, que `accueil.mjs` met en page sans
+ * réseau.
+ *
+ * EN PARALLÈLE, MAIS BORNÉE. Les sondes partaient une à une : près de deux cents
+ * requêtes attendues l'une après l'autre, 96 s de construction. Elles partent
+ * désormais ensemble, huit au plus en vol (`enFile`), et les résultats sont
+ * rangés dans l'ordre du catalogue : la page ne dépend pas de l'ordre
+ * d'arrivée des réponses.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -15,12 +22,46 @@ import { PAGES_BUREAU } from './pages-hub.mjs';
 import { dernierLastmod, urlsDuPlan } from './seo-hub.mjs';
 
 const ICI = dirname(fileURLToPath(import.meta.url));
-/** Socle local (sibling sous GithubMister) — priorité sur le fetch publié. */
+/** La copie de travail du socle, dépôt voisin : seulement avec `HUB_SOCLE_LOCAL=1`. */
 const COMMAND_LOCAL = join(ICI, '..', '..', 'dev-pwa-config', 'command.js');
+
+/** Requêtes en vol au plus, vers GitHub Pages comme vers raw.githubusercontent.com. */
+export const REQUETES_EN_VOL = 8;
+
+const pause = ms => new Promise(ok => setTimeout(ok, ms));
 
 // ---------------------------------------------------------------------------
 // Accès réseau
 // ---------------------------------------------------------------------------
+
+/**
+ * Une file d'attente : au plus `n` tâches en cours, les suivantes attendent
+ * leur tour. Chaque tâche lit sa réponse jusqu'au bout avant de rendre sa
+ * place, pour que la borne compte aussi les corps en cours de lecture.
+ */
+export function limiteur(n) {
+  let enCours = 0;
+  const file = [];
+  const suivante = () => {
+    if (enCours >= n || !file.length) return;
+    enCours += 1;
+    const { tache, ok, ko } = file.shift();
+    Promise.resolve()
+      .then(tache)
+      .then(ok, ko)
+      .finally(() => {
+        enCours -= 1;
+        suivante();
+      });
+  };
+  return tache =>
+    new Promise((ok, ko) => {
+      file.push({ tache, ok, ko });
+      suivante();
+    });
+}
+
+const enFile = limiteur(REQUETES_EN_VOL);
 
 /** Requête à l'API GitHub. Le jeton ne quitte jamais l'en-tête. */
 async function api(chemin, jeton) {
@@ -51,16 +92,28 @@ async function apiOuNull(chemin, jeton) {
   return r.json();
 }
 
-/** Code HTTP d'une URL, retenté : une sonde isolée qui échoue ne prouve rien. */
-async function statut(url, essais = 3) {
+/**
+ * Code HTTP d'une URL, retenté : une sonde isolée qui échoue ne prouve rien.
+ *
+ * HEAD d'abord : la sonde ne lit que le statut, et une image de partage pèse
+ * jusqu'à 90 Ko, que la sonde en GET téléchargeait pour rien. Un serveur qui
+ * refuse HEAD (405, 501) est relu en GET, dont le corps est abandonné.
+ */
+export async function statut(url, { essais = 3, pauseMs = 1500, recuperer = fetch } = {}) {
   for (let i = 1; i <= essais; i += 1) {
     try {
-      const r = await fetch(url, { redirect: 'follow' });
-      if (r.status === 200 || i === essais) return r.status;
+      const code = await enFile(async () => {
+        const tete = await recuperer(url, { method: 'HEAD', redirect: 'follow' });
+        if (tete.status !== 405 && tete.status !== 501) return tete.status;
+        const r = await recuperer(url, { redirect: 'follow' });
+        await r.body?.cancel();
+        return r.status;
+      });
+      if (code === 200 || i === essais) return code;
     } catch {
       if (i === essais) return 0;
     }
-    await new Promise(ok => setTimeout(ok, 1500 * i));
+    await pause(pauseMs * i);
   }
   return 0;
 }
@@ -77,13 +130,18 @@ const decode = t => t.replace(/&(amp|lt|gt|quot|#39);/g, (_, e) => ENTITES[e]);
 async function lire(url, essais = 3) {
   for (let i = 1; i <= essais; i += 1) {
     try {
-      const r = await fetch(url);
-      if (r.ok) return await r.text();
-      if (r.status === 404) return null;
+      const lu = await enFile(async () => {
+        const r = await fetch(url);
+        if (r.ok) return { texte: await r.text() };
+        await r.body?.cancel();
+        return { code: r.status };
+      });
+      if (lu.texte !== undefined) return lu.texte;
+      if (lu.code === 404) return null;
     } catch {
       // réseau : on retente
     }
-    if (i < essais) await new Promise(ok => setTimeout(ok, 1500 * i));
+    if (i < essais) await pause(1500 * i);
   }
   return null;
 }
@@ -103,22 +161,23 @@ async function pagesDe(base) {
   const xml = await lire(`${base}sitemap.xml`);
   if (!xml) return { pages: [], lastmod: null };
   const entrees = urlsDuPlan(xml);
-  const pages = [];
-  for (const { loc } of entrees) {
-    if (loc === base || !loc.startsWith(base)) continue;
-    const html = await lire(loc);
-    if (!html) continue;
-    const titre = /<h1[^>]*>([\s\S]*?)<\/h1>/i
-      .exec(html)?.[1]
-      ?.replace(/<[^>]+>/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    const langue = (/<html[^>]*\slang="([a-z]{2})/i.exec(html)?.[1] ?? 'fr').toLowerCase();
-    if (titre) {
-      pages.push({ url: loc, titre: decode(titre), langue, alternates: alternatesDe(html) });
-    }
-  }
-  return { pages, lastmod: dernierLastmod(entrees) };
+  const lues = await Promise.all(
+    entrees.map(async ({ loc }) => {
+      if (loc === base || !loc.startsWith(base)) return null;
+      const html = await lire(loc);
+      if (!html) return null;
+      const titre = /<h1[^>]*>([\s\S]*?)<\/h1>/i
+        .exec(html)?.[1]
+        ?.replace(/<[^>]+>/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const langue = (/<html[^>]*\slang="([a-z]{2})/i.exec(html)?.[1] ?? 'fr').toLowerCase();
+      return titre
+        ? { url: loc, titre: decode(titre), langue, alternates: alternatesDe(html) }
+        : null;
+    })
+  );
+  return { pages: lues.filter(Boolean), lastmod: dernierLastmod(entrees) };
 }
 
 /** Titre annoncé par un site, ou `null`. */
@@ -132,6 +191,9 @@ async function titreDe(url) {
  * Importe un module AUTONOME du socle à une étiquette donnée. Le texte passe par
  * une URL `data:` : aucun fichier temporaire, et aucun risque qu'un import
  * relatif aille chercher ailleurs — ces deux modules n'en ont pas.
+ *
+ * Ce code s'exécute dans le processus de la construction : `build-site.mjs`
+ * retire le jeton GitHub de `process.env` avant d'appeler la collecte.
  */
 async function moduleDuSocle({ compte, socle }, etiquette, chemin) {
   const url = `https://raw.githubusercontent.com/${compte}/${socle}/${etiquette}/${chemin}`;
@@ -144,20 +206,51 @@ async function moduleDuSocle({ compte, socle }, etiquette, chemin) {
 }
 
 /**
- * `command.js` du socle : copie locale sibling d'abord, sinon raw GitHub
- * (étiquette de release, puis `main`). Le paquet npm n'exporte pas encore
- * ce module ; la page doit rester autonome hors ligne.
+ * `command.js` du socle (recherche Ctrl+K), À L'ÉTIQUETTE QUE LIT DÉJÀ LA
+ * CONSTRUCTION, et nulle part ailleurs.
+ *
+ * Jusqu'ici, absent de l'étiquette, il était pris sur `main` : la page publiait
+ * du code que le socle n'avait pas encore publié. Et une copie de travail du
+ * socle, dépôt voisin, passait avant tout : un build local embarquait ce qui
+ * s'y trouvait ce jour-là. Désormais :
+ *   - présent à l'étiquette : son texte ;
+ *   - absent (404) : `null`, et l'accueil se construit sans le raccourci ;
+ *   - la copie locale ne sert que si on la demande, `HUB_SOCLE_LOCAL=1` ;
+ *   - toute autre réponse, après trois essais, fait échouer la construction :
+ *     un raccourci présent un soir et absent le lendemain changerait
+ *     l'empreinte de la page pour rien.
+ *
+ * @returns {Promise<string|null>}
  */
-export async function texteCommandDuSocle({ compte, socle }, etiquette) {
-  if (existsSync(COMMAND_LOCAL)) return readFileSync(COMMAND_LOCAL, 'utf8');
-  for (const ref of [etiquette, 'main']) {
-    const url = `https://raw.githubusercontent.com/${compte}/${socle}/${ref}/command.js`;
-    const r = await fetch(url);
-    if (r.ok) return await r.text();
+export async function texteCommandDuSocle(
+  { compte, socle },
+  etiquette,
+  {
+    local = process.env.HUB_SOCLE_LOCAL === '1',
+    cheminLocal = COMMAND_LOCAL,
+    recuperer = fetch,
+    essais = 3,
+    pauseMs = 1500,
+  } = {}
+) {
+  if (local) {
+    if (!existsSync(cheminLocal)) {
+      throw new Error(`HUB_SOCLE_LOCAL=1, mais ${cheminLocal} est absent`);
+    }
+    return readFileSync(cheminLocal, 'utf8');
   }
-  throw new Error(
-    `command.js introuvable : ni ${COMMAND_LOCAL}, ni raw GitHub (${etiquette}|main)`
-  );
+  const url = `https://raw.githubusercontent.com/${compte}/${socle}/${etiquette}/command.js`;
+  for (let i = 1; i <= essais; i += 1) {
+    try {
+      const r = await recuperer(url);
+      if (r.ok) return await r.text();
+      if (r.status === 404) return null;
+    } catch {
+      // réseau : on retente
+    }
+    if (i < essais) await pause(pauseMs * i);
+  }
+  throw new Error(`command.js @ ${etiquette} : illisible après ${essais} essais`);
 }
 
 // ---------------------------------------------------------------------------
@@ -179,9 +272,14 @@ export async function collecter({ compte, socle, soi, jeton, strict }) {
   const { tag_name: version } = await api(`repos/${compte}/${socle}/releases/latest`, jeton);
   console.log(`Catalogue du socle ${version}…`);
 
-  const catalogue = await moduleDuSocle(depot, version, 'apps-catalog.js');
-  const libellesFr = (await moduleDuSocle(depot, version, 'react/labels-fr.js')).default;
-  const libellesEn = (await moduleDuSocle(depot, version, 'react/labels-en.js')).default;
+  const [catalogue, labelsFr, labelsEn, command] = await Promise.all([
+    moduleDuSocle(depot, version, 'apps-catalog.js'),
+    moduleDuSocle(depot, version, 'react/labels-fr.js'),
+    moduleDuSocle(depot, version, 'react/labels-en.js'),
+    texteCommandDuSocle(depot, version),
+  ]);
+  const libellesFr = labelsFr.default;
+  const libellesEn = labelsEn.default;
   const { FAMILY_APPS, CATEGORIES, FAMILY_ORIGIN } = catalogue;
 
   console.log('Sites publiés…');
@@ -199,6 +297,23 @@ export async function collecter({ compte, socle, soi, jeton, strict }) {
   const surOrigine = url => url.startsWith(`${FAMILY_ORIGIN}/`);
 
   console.log(`${FAMILY_APPS.length} applications au catalogue :`);
+  const sondes = await Promise.all(
+    FAMILY_APPS.map(async app => {
+      // Une application de bureau pointe vers son dépôt : rien à sonder sur Pages.
+      if (!surOrigine(app.appUrl)) return { app, horsOrigine: true };
+      const code = await statut(app.appUrl);
+      if (code !== 200) {
+        return { app, code, pages: [], lastmod: null, aImage: false, aIcone: false };
+      }
+      const [{ pages, lastmod }, aImage, aIcone] = await Promise.all([
+        pagesDe(app.appUrl),
+        statut(`${app.appUrl}og-image.jpg`).then(c => c === 200),
+        statut(`${app.appUrl}icon-192.png`).then(c => c === 200),
+      ]);
+      return { app, code, pages, lastmod, aImage, aIcone };
+    })
+  );
+
   const enPanne = [];
   /** id de l'app → ses pages de contenu. */
   const pagesParApp = new Map();
@@ -212,23 +327,15 @@ export async function collecter({ compte, socle, soi, jeton, strict }) {
   const imageParApp = new Map();
   /** id de l'app → URL de son icon-192 (repli quand og-image manque). */
   const iconeParApp = new Map();
-  for (const app of FAMILY_APPS) {
-    // Une application de bureau pointe vers son dépôt : rien à sonder sur Pages.
-    if (!surOrigine(app.appUrl)) {
+  for (const { app, horsOrigine, code, pages, lastmod, aImage, aIcone } of sondes) {
+    if (horsOrigine) {
       console.log(`  · ${app.id.padEnd(20)} hors origine (${app.platform})`);
       continue;
     }
-    const code = await statut(app.appUrl);
-    const { pages, lastmod } =
-      code === 200 ? await pagesDe(app.appUrl) : { pages: [], lastmod: null };
     pagesParApp.set(app.id, pages);
     lastmodParPlan.set(app.appUrl, lastmod);
-    const imageUrl = `${app.appUrl}og-image.jpg`;
-    const aImage = code === 200 && (await statut(imageUrl)) === 200;
-    if (aImage) imageParApp.set(app.id, imageUrl);
-    const iconUrl = `${app.appUrl}icon-192.png`;
-    const aIcone = code === 200 && (await statut(iconUrl)) === 200;
-    if (aIcone) iconeParApp.set(app.id, iconUrl);
+    if (aImage) imageParApp.set(app.id, `${app.appUrl}og-image.jpg`);
+    if (aIcone) iconeParApp.set(app.id, `${app.appUrl}icon-192.png`);
     console.log(
       `  ${code === 200 ? '✓' : '✗'} ${app.id.padEnd(20)} ${code}` +
         (pages.length ? ` · ${pages.length} page(s) de contenu` : '') +
@@ -250,20 +357,28 @@ export async function collecter({ compte, socle, soi, jeton, strict }) {
   }
 
   const idsCatalogue = new Set(FAMILY_APPS.map(a => a.id));
-  const sites = [];
   /** Nom du site hors catalogue → ses pages de contenu (le squelette en a une). */
   const pagesParSite = new Map();
-  for (const d of depots) {
-    const base = `${FAMILY_ORIGIN}/${d.name}/`;
-    const plan = (await statut(`${base}sitemap.xml`)) === 200;
-    const estApp = idsCatalogue.has(d.name);
-    const titre = estApp ? null : ((await titreDe(base)) ?? d.name);
-    if (plan && !lastmodParPlan.has(base)) {
-      const { pages, lastmod } = await pagesDe(base);
-      lastmodParPlan.set(base, lastmod);
-      if (!estApp) pagesParSite.set(d.name, pages);
+  const lus = await Promise.all(
+    depots.map(async d => {
+      const base = `${FAMILY_ORIGIN}/${d.name}/`;
+      const estApp = idsCatalogue.has(d.name);
+      const [plan, titre] = await Promise.all([
+        statut(`${base}sitemap.xml`).then(c => c === 200),
+        estApp ? null : titreDe(base).then(t => t ?? d.name),
+      ]);
+      // Le plan d'une app a déjà été lu par sa sonde.
+      const contenu = plan && !lastmodParPlan.has(base) ? await pagesDe(base) : null;
+      return { site: { nom: d.name, base, plan, estApp, titre, desc: d.description }, contenu };
+    })
+  );
+  const sites = [];
+  for (const { site, contenu } of lus) {
+    if (contenu) {
+      lastmodParPlan.set(site.base, contenu.lastmod);
+      if (!site.estApp) pagesParSite.set(site.nom, contenu.pages);
     }
-    sites.push({ nom: d.name, base, plan, estApp, titre, desc: d.description });
+    sites.push(site);
   }
   const coulisses = sites
     .filter(s => !s.estApp)
@@ -275,18 +390,22 @@ export async function collecter({ compte, socle, soi, jeton, strict }) {
    * version publiée est lue sur l'API, pour ne jamais annoncer un installateur
    * qui n'existe pas.
    */
-  const bureau = [];
-  for (const app of FAMILY_APPS) {
-    if (surOrigine(app.appUrl) || !PAGES_BUREAU[app.id]) continue;
-    const derniere = await apiOuNull(`repos/${compte}/${app.id}/releases/latest`, jeton);
-    bureau.push({
-      app,
-      chemin: `/${app.id}.html`,
-      version: derniere
-        ? { tag: derniere.tag_name, url: derniere.html_url, date: derniere.published_at?.slice(0, 10) ?? null }
-        : null,
-    });
-    console.log(`  · ${app.id.padEnd(20)} page du hub /${app.id}.html · ${derniere ? derniere.tag_name : 'aucune version publiée'}`);
+  const bureau = await Promise.all(
+    FAMILY_APPS.filter(app => !surOrigine(app.appUrl) && PAGES_BUREAU[app.id]).map(
+      async app => {
+        const derniere = await apiOuNull(`repos/${compte}/${app.id}/releases/latest`, jeton);
+        return {
+          app,
+          chemin: `/${app.id}.html`,
+          version: derniere
+            ? { tag: derniere.tag_name, url: derniere.html_url, date: derniere.published_at?.slice(0, 10) ?? null }
+            : null,
+        };
+      }
+    )
+  );
+  for (const { app, version: v } of bureau) {
+    console.log(`  · ${app.id.padEnd(20)} page du hub /${app.id}.html · ${v ? v.tag : 'aucune version publiée'}`);
   }
   const pageDeBureau = new Map(bureau.map(b => [b.app.id, b]));
 
@@ -298,6 +417,7 @@ export async function collecter({ compte, socle, soi, jeton, strict }) {
     origine: FAMILY_ORIGIN,
     libellesFr,
     libellesEn,
+    command,
     avecIssues,
     enPanne,
     pagesParApp,

@@ -66,7 +66,7 @@ import {
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rendreAccueil } from './accueil.mjs';
-import { collecter, texteCommandDuSocle } from './collecte.mjs';
+import { collecter } from './collecte.mjs';
 import { DESCRIPTIONS_EN } from './descriptions-en.mjs';
 import { serviceWorkerHub } from './hub-sw.mjs';
 import { manifesteHub } from './manifeste-hub.mjs';
@@ -97,7 +97,17 @@ const SOI = `${COMPTE}.github.io`;
 /** Handle Buy Me a Coffee de la famille — même valeur que `FUNDING.yml`. */
 const SPONSOR_URL = 'https://buymeacoffee.com/mister.guiiug';
 const THEME = '#2f4bd1';
+
+/**
+ * LE JETON GITHUB NE RESTE PAS DANS L'ENVIRONNEMENT. La collecte exécute, par
+ * `import(data:)`, les modules du catalogue lus sur le socle : ils verraient
+ * `process.env`. Le jeton est gardé dans cette constante, que rien n'exporte,
+ * et retiré de l'environnement avant toute collecte. Limite connue : sous
+ * Linux, `/proc/self/environ` garde l'environnement de départ du processus.
+ */
 const JETON = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? '';
+delete process.env.GITHUB_TOKEN;
+delete process.env.GH_TOKEN;
 
 /**
  * LE FICHIER DE VÉRIFICATION DE SEARCH CONSOLE, et pourquoi il vit ici.
@@ -151,6 +161,7 @@ const {
   origine: FAMILY_ORIGIN,
   libellesFr,
   libellesEn,
+  command,
   avecIssues,
   enPanne,
   pagesParApp,
@@ -165,6 +176,14 @@ const {
 } = await collecter({ compte: COMPTE, socle: SOCLE, soi: SOI, jeton: JETON, strict });
 
 const surOrigine = url => url.startsWith(`${FAMILY_ORIGIN}/`);
+
+// Le raccourci Ctrl+K n'existe que si le socle publie `command.js` à cette
+// étiquette (voir `texteCommandDuSocle`). Sinon, la page se construit sans lui.
+if (!command) {
+  console.log(
+    `::warning::command.js absent du socle ${version} : l'accueil est publié sans le raccourci Ctrl+K.`
+  );
+}
 
 // UN SEUL ÉDITEUR. Le socle exporte le même nœud `#org` (`PUBLISHER`, à partir
 // de sa 6.19.0) pour que les apps et leurs pages le reprennent : si les deux
@@ -216,6 +235,7 @@ const {
   pageDeBureau,
   coulisses,
   pagesParSite,
+  raccourci: Boolean(command),
 });
 
 // Manifest + service worker : sans eux, Chrome Android n'offre pas
@@ -253,16 +273,21 @@ const CHEMINS_DU_HUB = [
   '/icon-192.png',
   '/icon-512.png',
   '/apple-touch-icon.png',
-  '/command.js',
-  '/hub-command.js',
+  ...(command ? ['/command.js', '/hub-command.js'] : []),
 ];
 
+/**
+ * UN SEUL DE « / » ET « /index.html » EST PRÉCACHÉ : la même page, téléchargée
+ * deux fois à l'installation du worker. On garde « / », l'adresse canonique et
+ * celle que charge un visiteur ; « /index.html », adresse de lancement de
+ * l'app installée, est rangé sous la même clé par le worker (voir `cle` dans
+ * scripts/hub-sw.mjs) : lancée hors ligne, l'app retrouve la page.
+ */
 const sw = serviceWorkerHub({
   compte: COMPTE,
   chemins: CHEMINS_DU_HUB,
   essentiels: [
     '/',
-    '/index.html',
     '/offline.html',
     '/manifest.webmanifest',
     '/icon-192.png',
@@ -502,10 +527,9 @@ copyFileSync(
   join(SORTIE, 'apple-touch-icon.png')
 );
 
-// Recherche Ctrl+K : module vanilla du socle (+ compagnon hub).
-{
-  const commandTexte = await texteCommandDuSocle({ compte: COMPTE, socle: SOCLE }, version);
-  writeFileSync(join(SORTIE, 'command.js'), commandTexte, 'utf8');
+// Recherche Ctrl+K : module vanilla du socle (+ compagnon hub), s'il est publié.
+if (command) {
+  writeFileSync(join(SORTIE, 'command.js'), command, 'utf8');
   copyFileSync(join(ICI, 'hub-command.js'), join(SORTIE, 'hub-command.js'));
 }
 

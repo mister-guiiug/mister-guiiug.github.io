@@ -53,8 +53,15 @@ jobs:
     outputs:
       # Les pages du hub dont le contenu a changé, en tableau JSON.
       urls-modifiees: ${{ steps.construction.outputs.urls-modifiees }}
+    env:
+      # Version exacte de sharp : aucune résolution de plage au moment de publier.
+      VERSION_SHARP: '0.34.4'
     steps:
+      # Le jeton n'est pas gardé dans .git/config : ni npm ni la construction
+      # n'en ont besoin pour lire le dépôt, déjà extrait.
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v7
         with:
@@ -66,9 +73,11 @@ jobs:
         run: node --test test/*.test.mjs
 
       # Miniatures 640w des cartes : pas de package.json sur ce dépôt, install
-      # éphémère. Sans sharp, le build recopie quand même les og-image.
+      # éphémère, à la version exacte. Sans script d'installation : sharp 0.34
+      # prend son binaire précompilé dans ses dépendances optionnelles. Sans
+      # sharp, le build recopie les og-image et n'écrit aucun WebP.
       - name: Installer sharp (miniatures hub)
-        run: npm install --no-save sharp@0.34.4
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund "sharp@${VERSION_SHARP}"
 
       - name: Engendrer le hub, ses pages, ses plans de site, robots.txt et les vérifications
         id: construction
@@ -108,6 +117,8 @@ jobs:
       # pendant quelques minutes. IndexNow invite Bing à crawler tout de suite :
       # un 4xx à ce moment-là laisse l'URL en « Discovered but not crawled ».
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc

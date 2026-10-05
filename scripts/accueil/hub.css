@@ -323,7 +323,7 @@ html[data-theme='system'] body {
 .filtre input {
   width: 100%;
   min-height: 2.75rem;
-  padding: 0.55rem 5.6rem 0.55rem 2.55rem;
+  padding: 0.55rem 0.95rem 0.55rem 2.55rem;
   border: 1px solid color-mix(in srgb, var(--bord) 75%, var(--lien));
   border-radius: 0.9rem;
   background: var(--fond-carte);
@@ -339,6 +339,10 @@ html[data-theme='system'] body {
 }
 .filtre input::placeholder {
   color: var(--doux);
+}
+/* La place de l'indication « Ctrl K », quand le raccourci existe. */
+.filtre-raccourci input {
+  padding-right: 5.6rem;
 }
 .filtre:focus-within input {
   padding-right: 0.95rem;

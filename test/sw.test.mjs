@@ -27,7 +27,7 @@ const SOURCE = serviceWorkerHub({
     '/a-propos.html',
     '/mister-quota.html',
   ],
-  essentiels: ['/', '/index.html', '/offline.html'],
+  essentiels: ['/', '/offline.html'],
   extras: ['/previews/miss-contraction.jpg', '/previews/miss-contraction.webp'],
 });
 
@@ -106,14 +106,15 @@ function evenement(url, { method = 'GET', mode = 'no-cors' } = {}) {
   return e;
 }
 
-test('le worker engendré se compile et porte le cache hub-v5', () => {
-  assert.equal(CACHE_HUB, 'hub-v5');
+test('le worker engendré se compile et porte le cache hub-v6', () => {
+  assert.equal(CACHE_HUB, 'hub-v6');
   assert.doesNotThrow(() => new vm.Script(SOURCE));
-  assert.match(SOURCE, /const CACHE = 'hub-v5';/);
+  assert.match(SOURCE, /const CACHE = 'hub-v6';/);
 });
 
 test('activate ne supprime QUE les anciens caches du hub', async () => {
   const caches = cachesSimules([
+    'hub-v5',
     'hub-v4',
     'hub-v3',
     CACHE_HUB,
@@ -126,7 +127,7 @@ test('activate ne supprime QUE les anciens caches du hub', async () => {
   const attentes = [];
   ecouteurs.activate({ waitUntil: p => attentes.push(p) });
   await Promise.all(attentes);
-  assert.deepEqual(caches.supprimes.sort(), ['hub-v3', 'hub-v4']);
+  assert.deepEqual(caches.supprimes.sort(), ['hub-v3', 'hub-v4', 'hub-v5']);
   assert.deepEqual([...caches.magasins.keys()].sort(), [
     CACHE_HUB,
     'images',
@@ -236,6 +237,32 @@ test('hors ligne : la page en cache, sinon la page hors ligne, sinon une erreur 
   const image = evenement(`${ORIGINE}/previews/miss-dice.jpg`);
   ecouteurs.fetch(image);
   assert.equal((await image.reponse).type, 'error');
+});
+
+test('« /index.html », lancement de l’app installée, partage la clé de « / »', async () => {
+  // En ligne : la page lue à « /index.html » remplace la copie de « / ».
+  const enLigne = charger({ reseau: async () => new Response('page fraîche') });
+  const visite = evenement(`${ORIGINE}/index.html`, { mode: 'navigate' });
+  enLigne.ecouteurs.fetch(visite);
+  await (await visite.reponse).text();
+  await Promise.all(visite.attentes);
+  const hub = enLigne.caches.magasins.get(CACHE_HUB);
+  assert.ok(hub.has(`${ORIGINE}/`));
+  assert.ok(!hub.has(`${ORIGINE}/index.html`), 'la page est rangée deux fois');
+
+  // Hors ligne : l'app lancée sur « /index.html » retrouve « / », seul précaché.
+  const horsLigne = charger({
+    reseau: async () => {
+      throw new TypeError('Failed to fetch');
+    },
+  });
+  const installation = [];
+  horsLigne.ecouteurs.install({ waitUntil: p => installation.push(p) });
+  await Promise.all(installation);
+  assert.ok(!horsLigne.caches.magasins.get(CACHE_HUB).has(`${ORIGINE}/index.html`));
+  const lancement = evenement(`${ORIGINE}/index.html`, { mode: 'navigate' });
+  horsLigne.ecouteurs.fetch(lancement);
+  assert.equal(await (await lancement.reponse).text(), 'précache /');
 });
 
 test('un chemin mal formé est refusé à la construction', () => {

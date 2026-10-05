@@ -596,6 +596,8 @@ const i18nClient = ctx => {
  * @param {Map<string, object>} donnees.pageDeBureau    id → page du hub d'une app de bureau
  * @param {object[]} donnees.coulisses    les sites publiés hors catalogue
  * @param {Map<string, object[]>} donnees.pagesParSite  nom → pages de contenu
+ * @param {boolean} [donnees.raccourci]  le socle publie `command.js` : la page
+ *   charge le raccourci Ctrl+K et l'annonce ; sinon ni module, ni indication
  * @returns {{ html: string, description: string, featuredId: string|null, nbSections: number, nbGuides: number }}
  */
 export function rendreAccueil(donnees) {
@@ -727,6 +729,7 @@ function pageHtml(ctx) {
     majFr,
     css,
     script,
+    raccourci,
   } = ctx;
   return `<!doctype html>
 <html lang="fr" data-theme="system">
@@ -839,7 +842,7 @@ ${css}
         <a href="${origine}/parc-dashboard/" data-i18n="siteParc">Parc</a>
       </nav>
 
-      <label class="filtre">
+      <label class="filtre${raccourci ? ' filtre-raccourci' : ''}">
           <span class="sr-only" data-i18n="filtre">Rechercher une application</span>
           <span class="filtre-ico" aria-hidden="true">
             <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>
@@ -848,17 +851,17 @@ ${css}
             type="search"
             id="filtre"
             data-i18n-placeholder="filtrePh"
-            placeholder="Rechercher…"
-            aria-keyshortcuts="Control+K Meta+K"
+            placeholder="Rechercher…"${raccourci ? `
+            aria-keyshortcuts="Control+K Meta+K"` : ''}
             autocomplete="off"
             spellcheck="false"
             enterkeyhint="search"
-          />
+          />${raccourci ? `
           <kbd class="filtre-kbd" aria-hidden="true">
             <span data-mod="ctrl">Ctrl</span>
             <span data-mod="meta">⌘</span>
             <span>K</span>
-          </kbd>
+          </kbd>` : ''}
       </label>
 
       <div class="outils">
@@ -993,8 +996,8 @@ ${coulisses.map(s => carteCoulisse(ctx, s)).join('\n')}
     </a>
 <script>
 ${script}
-    </script>
-    <script type="module" src="./hub-command.js"></script>
+    </script>${raccourci ? `
+    <script type="module" src="./hub-command.js"></script>` : ''}
   </body>
 </html>
 `;
