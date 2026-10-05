@@ -51,11 +51,13 @@ import { createHash } from 'node:crypto';
 import {
   appendFileSync,
   copyFileSync,
+  existsSync,
   mkdirSync,
   readFileSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { serviceWorkerHub } from './hub-sw.mjs';
 import { manifesteHub } from './manifeste-hub.mjs';
 import { INDEXNOW_CLE } from './indexnow-cle.mjs';
@@ -87,10 +89,13 @@ import {
   urlsDuPlan,
 } from './seo-hub.mjs';
 
+const ICI = dirname(fileURLToPath(import.meta.url));
 const SORTIE = process.argv[2] ?? '_site';
 const COMPTE = 'mister-guiiug';
 const SOCLE = 'dev-pwa-config';
 const SOI = `${COMPTE}.github.io`;
+/** Socle local (sibling sous GithubMister) — priorité sur le fetch publié. */
+const COMMAND_LOCAL = join(ICI, '..', '..', 'dev-pwa-config', 'command.js');
 /** Handle Buy Me a Coffee de la famille — même valeur que `FUNDING.yml`. */
 const SPONSOR_URL = 'https://buymeacoffee.com/mister.guiiug';
 const THEME = '#2f4bd1';
@@ -256,6 +261,23 @@ async function moduleDuSocle(etiquette, chemin) {
   const texte = await r.text();
   return import(
     `data:text/javascript;base64,${Buffer.from(texte).toString('base64')}`
+  );
+}
+
+/**
+ * `command.js` du socle : copie locale sibling d'abord, sinon raw GitHub
+ * (étiquette de release, puis `main`). Le paquet npm n'exporte pas encore
+ * ce module ; la page doit rester autonome hors ligne.
+ */
+async function texteCommandDuSocle(etiquette) {
+  if (existsSync(COMMAND_LOCAL)) return readFileSync(COMMAND_LOCAL, 'utf8');
+  for (const ref of [etiquette, 'main']) {
+    const url = `https://raw.githubusercontent.com/${COMPTE}/${SOCLE}/${ref}/command.js`;
+    const r = await fetch(url);
+    if (r.ok) return await r.text();
+  }
+  throw new Error(
+    `command.js introuvable : ni ${COMMAND_LOCAL}, ni raw GitHub (${etiquette}|main)`
   );
 }
 
@@ -2963,22 +2985,7 @@ ${coulisses.map(carteCoulisse).join('\n')}
         }
 
         document.addEventListener('keydown', function (e) {
-          var mod = e.ctrlKey || e.metaKey;
-          if (mod && !e.altKey && !e.shiftKey && (e.key === 'k' || e.key === 'K')) {
-            if (!filtre) return;
-            e.preventDefault();
-            filtre.focus();
-            filtre.select();
-            return;
-          }
-          if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            var tag = (e.target && e.target.tagName) || '';
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
-            if (!filtre) return;
-            e.preventDefault();
-            filtre.focus();
-            filtre.select();
-          }
+          // Ctrl/Meta+K et « / » : voir hub-command.js (bindSearchHotkeys).
           if (e.key === 'Escape' && filtre && document.activeElement === filtre) {
             clearFilters();
           }
@@ -3083,6 +3090,7 @@ ${coulisses.map(carteCoulisse).join('\n')}
         }
       })();
     </script>
+    <script type="module" src="./hub-command.js"></script>
   </body>
 </html>
 `;
@@ -3122,6 +3130,8 @@ const CHEMINS_DU_HUB = [
   '/icon-192.png',
   '/icon-512.png',
   '/apple-touch-icon.png',
+  '/command.js',
+  '/hub-command.js',
 ];
 
 const sw = serviceWorkerHub({
@@ -3368,6 +3378,13 @@ copyFileSync(
   new URL('../static/apple-touch-icon.png', import.meta.url),
   join(SORTIE, 'apple-touch-icon.png')
 );
+
+// Recherche Ctrl+K : module vanilla du socle (+ compagnon hub).
+{
+  const commandTexte = await texteCommandDuSocle(version);
+  writeFileSync(join(SORTIE, 'command.js'), commandTexte, 'utf8');
+  copyFileSync(join(ICI, 'hub-command.js'), join(SORTIE, 'hub-command.js'));
+}
 
 // CE QUE LE JOB « PUBLIER » SIGNALERA À INDEXNOW : les pages du hub dont le
 // contenu a changé à cette construction, et elles seules (scripts/indexnow.mjs).
