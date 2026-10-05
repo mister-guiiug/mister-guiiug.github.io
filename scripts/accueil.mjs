@@ -17,10 +17,12 @@ import { readFileSync } from 'node:fs';
 import { JETON_CSP } from './csp.mjs';
 import { echappe } from './echappe.mjs';
 import { entreeGuide, lienGuideDeCarte, regrouperGuides } from './guides.mjs';
+import { poserPalettes } from './palette.mjs';
 import { JETONS, entiteEditeur, entiteSite, jsonLdTexte } from './pages-hub.mjs';
 import { MOTIF_ROBOT } from './seo-hub.mjs';
 
-const CSS = readFileSync(new URL('./accueil/hub.css', import.meta.url), 'utf8');
+/** La feuille de style, palettes posées (voir palette.mjs). */
+const CSS = poserPalettes(readFileSync(new URL('./accueil/hub.css', import.meta.url), 'utf8'));
 const SCRIPT = readFileSync(new URL('./accueil/hub-client.js', import.meta.url), 'utf8');
 
 /** Indente de `n` espaces chaque ligne non vide : la forme qu'avait le gabarit. */

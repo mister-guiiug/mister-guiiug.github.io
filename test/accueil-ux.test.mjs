@@ -10,7 +10,9 @@ import { rendreAccueil } from '../scripts/accueil.mjs';
 import { DESCRIPTIONS_EN, appsSansDescriptionEn } from '../scripts/descriptions-en.mjs';
 import { donneesFactices } from './catalogue-factice.mjs';
 
-const CSS = readFileSync(new URL('../scripts/accueil/hub.css', import.meta.url), 'utf8');
+/** La feuille de style telle que la page la publie : palettes posées. */
+const CSS = /<style>([\s\S]*?)<\/style>/.exec(rendreAccueil(donneesFactices()).html)[1];
+const SOURCE_CSS = readFileSync(new URL('../scripts/accueil/hub.css', import.meta.url), 'utf8');
 const STATIQUES = readFileSync(new URL('../scripts/pages-hub.mjs', import.meta.url), 'utf8');
 
 test('liens : aucun target=_blank servi ; ceux de la famille sont marqués pour le hub installé', () => {
@@ -94,6 +96,29 @@ test('contraste : lien d’évitement et badge « Non vérifiée » au-dessus de
   assert.match(CSS, /\.badge-panne \{[^}]*color: var\(--panne-fg\);/);
   assert.doesNotMatch(CSS, /html\[data-theme='dark'\] \.badge-panne/);
   assert.match(STATIQUES, /\.evitement \{[^}]*color: var\(--fond\);/);
+});
+
+test('palette : écrite une fois, posée dans les deux contextes sombres et sur les pages statiques', async () => {
+  const { CLAIR, SOMBRE, JETONS_COMMUNS } = await import('../scripts/palette.mjs');
+  // La source de la feuille de style ne porte plus aucune couleur de jeton.
+  assert.equal(SOURCE_CSS.match(/\/\* @palette sombre \*\//g)?.length, 2);
+  assert.equal(SOURCE_CSS.match(/\/\* @palette clair \*\//g)?.length, 1);
+  assert.doesNotMatch(SOURCE_CSS, /^\s*--[a-z-]+:\s*#[0-9a-f]{3,6};/im);
+  // La page publiée porte la palette, identique pour le sombre choisi et le système sombre.
+  const sombre = jetons("html[data-theme='dark']");
+  for (const [nom, valeur] of Object.entries(SOMBRE)) {
+    if (typeof valeur === 'string' && valeur.startsWith('#')) assert.equal(sombre[nom], valeur, nom);
+  }
+  assert.deepEqual(jetons("  html[data-theme='system']"), sombre);
+  // Les pages statiques lisent les mêmes jetons communs.
+  const { page404 } = await import('../scripts/pages-hub.mjs');
+  const statique = page404({ origine: 'https://exemple.github.io', compte: 'exemple', apps: [] });
+  for (const nom of JETONS_COMMUNS) {
+    assert.ok(statique.includes(`--${nom}: ${CLAIR[nom]};`), `${nom} clair`);
+    assert.ok(statique.includes(`--${nom}: ${SOMBRE[nom]};`), `${nom} sombre`);
+  }
+  // Le motif du fond suit la palette, en variable.
+  assert.match(CSS, /background: var\(--motif\), var\(--fond\);/);
 });
 
 test('guides : le nom de l’app et « Read in English » font 24 px de haut au moins', () => {
