@@ -157,7 +157,7 @@ const STYLE = `
         padding: 0.5rem 0.85rem;
         border-radius: 0.5rem;
         background: var(--lien);
-        color: #fff;
+        color: var(--fond);
         transform: translateY(-200%);
       }
       .evitement:focus {

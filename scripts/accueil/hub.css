@@ -14,6 +14,9 @@
   --beta-bg: #e8f7f2;
   --beta-bd: #7bc4b0;
   --chrome: #f7f8fc;
+  /* « Non vérifiée » : une teinte, et le texte qui la lit au-dessus de 4,5:1. */
+  --panne: #b45309;
+  --panne-fg: #9a3412;
 }
 html[data-theme='dark'] {
   color-scheme: dark;
@@ -31,6 +34,7 @@ html[data-theme='dark'] {
   --beta-bg: #12352c;
   --beta-bd: #3d7a68;
   --chrome: #0f1220;
+  --panne-fg: #fdba74;
 }
 @media (prefers-color-scheme: dark) {
   html[data-theme='system'] {
@@ -49,6 +53,7 @@ html[data-theme='dark'] {
     --beta-bg: #12352c;
     --beta-bd: #3d7a68;
     --chrome: #0f1220;
+    --panne-fg: #fdba74;
   }
 }
 * {
@@ -111,7 +116,9 @@ html[data-theme='system'] body {
   padding: 0.5rem 0.85rem;
   border-radius: 0.5rem;
   background: var(--lien);
-  color: #fff;
+  /* var(--fond) : 6,5:1 en clair, 9,1:1 en sombre. Le blanc tombait à 2,04:1
+     sur le lien clair du thème sombre. */
+  color: var(--fond);
   text-decoration: none;
   transform: translateY(-200%);
 }
@@ -643,13 +650,12 @@ ul {
   font-size: 0.82rem;
   font-weight: 600;
 }
+/* La couleur vient des palettes : le thème « système » sur un appareil
+   sombre gardait la couleur claire, à 2,13:1. */
 .badge-panne {
-  border-color: color-mix(in srgb, #b45309 45%, var(--bord));
-  background: color-mix(in srgb, #b45309 14%, var(--fond-carte));
-  color: #9a3412;
-}
-html[data-theme='dark'] .badge-panne {
-  color: #fdba74;
+  border-color: color-mix(in srgb, var(--panne) 45%, var(--bord));
+  background: color-mix(in srgb, var(--panne) 14%, var(--fond-carte));
+  color: var(--panne-fg);
 }
 .carte-panne {
   opacity: 0.92;
@@ -657,9 +663,9 @@ html[data-theme='dark'] .badge-panne {
 .bandeau-panne {
   margin: 0 0 1rem;
   padding: 0.7rem 0.95rem;
-  border: 1px solid color-mix(in srgb, #b45309 40%, var(--bord));
+  border: 1px solid color-mix(in srgb, var(--panne) 40%, var(--bord));
   border-radius: 0.75rem;
-  background: color-mix(in srgb, #b45309 10%, var(--fond-carte));
+  background: color-mix(in srgb, var(--panne) 10%, var(--fond-carte));
   color: var(--texte);
   font-size: 0.9rem;
 }
@@ -914,7 +920,7 @@ ul.guides-liste {
 }
 .guide-titre {
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.5rem;
   text-decoration: none;
 }
 .guide-titre:hover {
@@ -924,6 +930,13 @@ ul.guides-liste {
   display: block;
   margin-top: 0.1rem;
   font-size: 0.82rem;
+}
+/* Le nom de l'app et « Read in English » : des cibles de 24 px de haut au
+   moins (WCAG 2.5.8), plus des liens de la hauteur de leur police. */
+.guide-meta a {
+  display: inline-block;
+  min-height: 1.5rem;
+  line-height: 1.5rem;
 }
 .guide-app {
   color: var(--doux);

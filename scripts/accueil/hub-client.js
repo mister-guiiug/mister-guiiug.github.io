@@ -163,6 +163,24 @@
     document.title = t.titleCourt && estInstallee() && !robot ? t.titleCourt : t.title;
   }
 
+  // HORS DU SHELL, SEULEMENT UNE FOIS INSTALLÉ. Dans un onglet, un lien de la
+  // famille s'ouvre sur place. Dans le hub installé, il ouvre le navigateur,
+  // où chaque app reste installable à part ; le lien le dit pour l'oreille,
+  // dans la langue choisie (applyLang traduit la mention).
+  function ouvreHorsShell() {
+    if (!estInstallee()) return;
+    document.querySelectorAll('a[data-hors-shell]').forEach(function (a) {
+      if (a.target === '_blank') return;
+      a.target = '_blank';
+      if (a.getAttribute('aria-hidden') === 'true' || a.hasAttribute('aria-label')) return;
+      var mention = document.createElement('span');
+      mention.className = 'sr-only';
+      mention.setAttribute('data-i18n', 'nouvelOnglet');
+      mention.textContent = ' ' + I18N[lang()].nouvelOnglet;
+      a.appendChild(mention);
+    });
+  }
+
   function writeUrl() {
     if (syncingUrl) return;
     var p = new URLSearchParams(location.search);
@@ -362,7 +380,12 @@
   });
   // Installée depuis l'onglet, la page passe dans la fenêtre de l'app.
   var modeInstalle = window.matchMedia('(display-mode: standalone)');
-  if (modeInstalle.addEventListener) modeInstalle.addEventListener('change', appliqueTitre);
+  if (modeInstalle.addEventListener) {
+    modeInstalle.addEventListener('change', function () {
+      appliqueTitre();
+      ouvreHorsShell();
+    });
+  }
 
   if (filtre) filtre.addEventListener('input', applyFilters);
   document.querySelectorAll('[data-maturity-filter]').forEach(function (btn) {
@@ -468,7 +491,8 @@
   if (hasardBtn && HASARD && HASARD.length) {
     hasardBtn.addEventListener('click', function () {
       var url = HASARD[Math.floor(Math.random() * HASARD.length)];
-      window.open(url, '_blank', 'noopener,noreferrer');
+      if (estInstallee()) window.open(url, '_blank', 'noopener,noreferrer');
+      else location.assign(url);
     });
   }
 
@@ -573,6 +597,7 @@
   });
 
   markImages();
+  ouvreHorsShell();
   applyLang(lang());
   applyTheme(theme());
   readUrl();

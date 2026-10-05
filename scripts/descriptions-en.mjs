@@ -32,4 +32,17 @@ export const DESCRIPTIONS_EN = {
   'mister-quota': 'AI service usage tracker (desktop app).',
   'mister-settle':
     'Split expenses with friends: who paid, who owes what, suggested reimbursements — no payments.',
+  'miss-devises':
+    'Visual currency converter: drawn banknotes and coins, two-way conversion, rate history and an annotated notebook.',
 };
+
+/**
+ * Les applications du catalogue sans description anglaise. Leur carte garde
+ * en anglais sa description française, marquée lang="fr" ; la construction
+ * les nomme dans un ::warning::.
+ *
+ * @param {{ id: string }[]} apps
+ * @param {Record<string, string>} [descriptions]
+ */
+export const appsSansDescriptionEn = (apps, descriptions = DESCRIPTIONS_EN) =>
+  apps.filter(a => !descriptions[a.id]?.trim()).map(a => a.id);

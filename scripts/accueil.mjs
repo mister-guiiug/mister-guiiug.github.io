@@ -91,13 +91,16 @@ const maturite = (libellesFr, m) =>
     : ` <span class="badge badge-${echappe(m)}" data-i18n-maturity="${echappe(m)}">${echappe(libellesFr.maturity?.[m] ?? m)}</span>`;
 
 /**
- * Les liens vers les apps s'ouvrent hors du shell du hub une fois installé :
- * `target=_blank` renvoie Chrome / le navigateur, où chaque app reste
- * installable séparément — à condition que la portée du hub ne la couvre pas,
- * ce qu'elle a fait du 27/09 au 03/10/2026 (voir scripts/manifeste-hub.mjs).
+ * UN LIEN DE LA FAMILLE S'OUVRE SUR PLACE, COMME TOUT LIEN. Il portait
+ * `target=_blank` partout : dans un onglet, 160 liens sur 179 ouvraient un
+ * nouvel onglet sans le dire. Seul le hub INSTALLÉ a besoin d'en sortir, pour
+ * que chaque app reste installable à part : le script y pose `target=_blank`
+ * sur les liens marqués `data-hors-shell`, et le dit pour l'oreille (voir
+ * hub-client.js). `rel="noreferrer"` garde le comportement d'avant : l'app
+ * ouverte ne reçoit pas l'adresse du catalogue, recherche comprise.
  */
 const lienHorsShell = (url, texte, attrs = '') =>
-  `<a href="${echappe(url)}" target="_blank" rel="noopener noreferrer"${attrs}>${texte}</a>`;
+  `<a href="${echappe(url)}" rel="noreferrer" data-hors-shell${attrs}>${texte}</a>`;
 
 /**
  * La vignette d'une app : la miniature de son image de partage. Son `alt` la
@@ -252,7 +255,7 @@ const carteApp = (ctx, app, featuredId) => {
 ${visuel}
             <div class="corps">
               <h3><span class="nom">${echappe(app.name)}</span>${maturite(libellesFr, app.maturity)}${badgeBureau}${badgeUne}${badgePanne}</h3>
-              <p data-fr="${echappe(app.description)}" data-en="${echappe(descEn)}">${echappe(app.description)}</p>${actions}
+              <p${descriptionsEn[app.id] ? '' : ' lang="fr"'} data-fr="${echappe(app.description)}" data-en="${echappe(descEn)}">${echappe(app.description)}</p>${actions}
             </div>
           </li>`;
 };
@@ -497,6 +500,7 @@ const libellesClient = ctx => {
       triFiltre: 'Tri',
       triStable: 'Stables d’abord',
       triAz: 'A–Z',
+      nouvelOnglet: '(nouvel onglet)',
       hasard: 'Au hasard',
       haut: 'Retour en haut',
       coulissesIntro: 'Infrastructure de la famille — pas des applications à installer.',
@@ -570,6 +574,7 @@ const libellesClient = ctx => {
       triFiltre: 'Sort',
       triStable: 'Stable first',
       triAz: 'A–Z',
+      nouvelOnglet: '(new tab)',
       hasard: 'Feeling lucky',
       haut: 'Back to top',
       coulissesIntro: 'Family infrastructure — not apps to install.',

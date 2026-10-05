@@ -69,7 +69,7 @@ import { rendreAccueil } from './accueil.mjs';
 import { collecter, lireOctets } from './collecte.mjs';
 import { adresseApercu, versApercu } from './apercu.mjs';
 import { JETON_CSP, poserPolitique } from './csp.mjs';
-import { DESCRIPTIONS_EN } from './descriptions-en.mjs';
+import { DESCRIPTIONS_EN, appsSansDescriptionEn } from './descriptions-en.mjs';
 import { serviceWorkerHub } from './hub-sw.mjs';
 import { manifesteHub } from './manifeste-hub.mjs';
 import { INDEXNOW_CLE } from './indexnow-cle.mjs';
@@ -187,6 +187,17 @@ if (!command) {
   console.log(
     `::warning::command.js absent du socle ${version} : l'accueil est publié sans le raccourci Ctrl+K.`
   );
+}
+
+// Une app née au catalogue sans description anglaise : sa carte garde le
+// français en anglais, marqué lang="fr" ; la CI le signale.
+{
+  const sansAnglais = appsSansDescriptionEn(FAMILY_APPS);
+  if (sansAnglais.length) {
+    console.log(
+      `::warning::Description anglaise absente pour ${sansAnglais.join(', ')} : l'ajouter à scripts/descriptions-en.mjs.`
+    );
+  }
 }
 
 // UN SEUL ÉDITEUR. Le socle exporte le même nœud `#org` (`PUBLISHER`, à partir
