@@ -67,6 +67,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rendreAccueil } from './accueil.mjs';
 import { collecter } from './collecte.mjs';
+import { adresseApercu, versApercu } from './apercu.mjs';
 import { JETON_CSP, poserPolitique } from './csp.mjs';
 import { DESCRIPTIONS_EN } from './descriptions-en.mjs';
 import { serviceWorkerHub } from './hub-sw.mjs';
@@ -92,6 +93,8 @@ import {
 
 const ICI = dirname(fileURLToPath(import.meta.url));
 const SORTIE = process.argv[2] ?? '_site';
+/** Un aperçu local, jamais en CI : voir scripts/apercu.mjs. */
+const APERCU = adresseApercu(process.env.HUB_APERCU);
 const COMPTE = 'mister-guiiug';
 const SOCLE = 'dev-pwa-config';
 const SOI = `${COMPTE}.github.io`;
@@ -245,8 +248,9 @@ const {
 // ne doit pas toucher (voir scripts/hub-sw.mjs). Le MANIFESTE, lui, ne couvre
 // que la page du hub : une portée « / » rendait les vingt apps impossibles à
 // installer dès que le hub l'était (voir scripts/manifeste-hub.mjs).
+// En aperçu local, le manifeste entier (id compris) désigne l'aperçu.
 const manifeste = manifesteHub({
-  origine: FAMILY_ORIGIN,
+  origine: APERCU ?? FAMILY_ORIGIN,
   compte: COMPTE,
   description,
   theme: THEME,
@@ -284,21 +288,27 @@ const CHEMINS_DU_HUB = [
  * l'app installée, est rangé sous la même clé par le worker (voir `cle` dans
  * scripts/hub-sw.mjs) : lancée hors ligne, l'app retrouve la page.
  */
+/** En aperçu local, le hub est servi sous un chemin : ses fichiers le suivent. */
+const SOUS_CHEMIN = APERCU ? new URL(APERCU).pathname.replace(/\/+$/, '') : '';
+const sousChemin = chemins => chemins.map(c => `${SOUS_CHEMIN}${c}`);
+
 const sw = serviceWorkerHub({
   compte: COMPTE,
-  chemins: CHEMINS_DU_HUB,
-  essentiels: [
+  chemins: sousChemin(CHEMINS_DU_HUB),
+  essentiels: sousChemin([
     '/',
     '/offline.html',
     '/manifest.webmanifest',
     '/icon-192.png',
     '/icon-512.png',
-  ],
+  ]),
   // La miniature du projecteur, si elle existe ; sans sharp, pas de WebP.
-  extras:
+  extras: sousChemin(
     featuredId && imageParApp.has(featuredId)
       ? [`/previews/${featuredId}.jpg`, `/previews/${featuredId}.webp`]
-      : [],
+      : []
+  ),
+  horsLigne: `${SOUS_CHEMIN}/offline.html`,
 });
 
 const offlineHtml = `<!doctype html>
@@ -441,9 +451,11 @@ const pagesDatees = pagesDuPlan.map(p => ({ ...p, texte: dater(p.texte, lastmodD
  */
 for (const p of pagesDatees) {
   if (p.fichier !== 'index.html') continue;
-  p.texte = poserPolitique(p.texte, {
+  const hub = APERCU ?? FAMILY_ORIGIN;
+  p.texte = poserPolitique(versApercu(p.texte, { origine: FAMILY_ORIGIN, apercu: APERCU }), {
     origine: FAMILY_ORIGIN,
-    scripts: command ? [`${FAMILY_ORIGIN}/hub-command.js`, `${FAMILY_ORIGIN}/command.js`] : [],
+    apercu: APERCU,
+    scripts: command ? [`${hub}/hub-command.js`, `${hub}/command.js`] : [],
   });
 }
 

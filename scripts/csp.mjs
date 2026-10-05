@@ -48,17 +48,20 @@ export const stylesEnLigne = html =>
  * @param {string} html  la page, datée
  * @param {object} p
  * @param {string} p.origine            l'origine de la famille
+ * @param {string|null} [p.apercu]      l'adresse d'un aperçu local (voir apercu.mjs) :
+ *   les fichiers du hub y sont servis, les icônes des apps restent sur l'origine
  * @param {string[]} [p.scripts]        les adresses complètes des scripts externes
  */
-export function politiqueAccueil(html, { origine, scripts = [] }) {
+export function politiqueAccueil(html, { origine, apercu = null, scripts = [] }) {
+  const hub = apercu ?? origine;
   return [
     "default-src 'none'",
     ['script-src', ...scriptsEnLigne(html).map(empreinte), ...scripts].join(' '),
     ['style-src', ...stylesEnLigne(html).map(empreinte)].join(' '),
-    `img-src ${origine}`,
+    ['img-src', origine, ...(apercu ? [`${apercu}/`] : [])].join(' '),
     "connect-src 'none'",
-    `worker-src ${origine}/sw.js`,
-    `manifest-src ${origine}/manifest.webmanifest`,
+    `worker-src ${hub}/sw.js`,
+    `manifest-src ${hub}/manifest.webmanifest`,
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",
