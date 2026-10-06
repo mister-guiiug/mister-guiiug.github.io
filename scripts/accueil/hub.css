@@ -21,6 +21,13 @@ html[data-theme='dark'] {
 * {
   box-sizing: border-box;
 }
+/* L'ATTRIBUT `hidden` L'EMPORTE TOUJOURS. Le navigateur ne le traduit qu'en
+   un `display: none` de faible poids : `.carte { display: flex }` le
+   recouvrait, et la recherche posait `hidden` sur vingt cartes sur vingt et
+   une sans en masquer aucune — « 1 sur 21 » au-dessus de trois cartes. */
+[hidden] {
+  display: none !important;
+}
 body {
   margin: 0 auto;
   max-width: 60rem;

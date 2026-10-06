@@ -315,8 +315,12 @@ ${
 
 const carteCoulisse = (ctx, s) => {
   // Le squelette a sa page de contenu : elle n'était liée de nulle part.
-  const lienGuide = lienGuideDeCarte(regrouperGuides(ctx.pagesParSite.get(s.nom) ?? []));
-  return `          <li class="carte">
+  const pages = ctx.pagesParSite.get(s.nom) ?? [];
+  const lienGuide = lienGuideDeCarte(regrouperGuides(pages));
+  // Pas une application : la recherche la lit (titre, description, guides),
+  // les filtres de maturité et de plateforme non.
+  const recherche = [s.titre, s.desc, ...pages.map(p => p.titre)].join(' ').toLowerCase();
+  return `          <li class="carte" data-recherche="${echappe(recherche)}">
             ${lienHorsShell(`/${s.nom}/`, '', ` class="carte-hit" aria-label="${echappe(s.titre)}"`)}
             <div class="corps">
               <h3><span class="nom">${echappe(s.titre)}</span></h3>

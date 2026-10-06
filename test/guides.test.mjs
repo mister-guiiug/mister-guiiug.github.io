@@ -97,7 +97,8 @@ test('lienGuideDeCarte : servi en français, il dit où mène l’anglais', () =
 test('entreeGuide : une traduction, le titre servi en français et l’autre langue à un geste', () => {
   const [, yahtzee] = regrouperGuides([R421, YAHTZEE_FR, YAHTZEE_EN]);
   const html = entreeGuide(yahtzee, { nom: 'Miss Dice', site: B, ordre: 1 });
-  assert.match(html, /<li class="guide" data-ordre="1" data-langues="fr en">/);
+  // La recherche de l'accueil lit l'app et le titre dans les deux langues.
+  assert.match(html, /<li class="guide" data-ordre="1" data-langues="fr en" data-recherche="miss dice règles du yahtzee yahtzee rules">/);
   // Le titre : français au service, chaque langue en attributs, son `lang`.
   assert.match(
     html,

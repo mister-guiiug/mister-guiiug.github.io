@@ -168,7 +168,10 @@ const DIT_LA_LANGUE = {
 export function entreeGuide(guide, { nom, site, ordre }) {
   const langues = LANGUES.filter(l => guide[l]);
   const app = lien(site, echappe(nom), ' class="guide-app"');
-  const debut = `              <li class="guide" data-ordre="${ordre}" data-langues="${langues.join(' ')}">`;
+  // Ce que la recherche de l'accueil lit : le nom de l'app et le titre dans
+  // chaque langue, pour qu'un guide se trouve quelle que soit celle de la page.
+  const recherche = [nom, ...langues.map(l => guide[l].titre)].join(' ').toLowerCase();
+  const debut = `              <li class="guide" data-ordre="${ordre}" data-langues="${langues.join(' ')}" data-recherche="${echappe(recherche)}">`;
   if (guide.fr && guide.en) {
     const { fr, en } = guide;
     const titre = lien(
