@@ -16,7 +16,10 @@
   var sortMode = 'stable';
   var activeCat = '';
   var deferredPrompt = null;
-  var syncingUrl = false;
+  // VRAI JUSQU'À LA LECTURE DE L'URL. `applyLang` passe avant `readUrl` et
+  // réécrit l'URL depuis des filtres encore vides : un lien `/?q=contraction`
+  // perdait sa recherche avant d'avoir été lu.
+  var syncingUrl = true;
   var compteTimer = null;
   var ROBOT = __HUB_ROBOT__;
 
@@ -244,25 +247,45 @@
     syncFiltresBadge();
   }
 
+  /** Minuscules, sans accents : « molkky » trouve Mölkky, « sante » Santé. */
+  function plie(texte) {
+    return String(texte || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
+  /** Chaque mot cherché, dans n'importe quel ordre : « timer contraction » trouve Miss Contraction. */
+  function correspond(el, attribut, mots) {
+    var texte = plie(el.getAttribute(attribut));
+    return mots.every(function (mot) {
+      return texte.indexOf(mot) !== -1;
+    });
+  }
+
   function applyFilters() {
-    var q = filtre ? filtre.value.trim().toLowerCase() : '';
+    var mots = plie(filtre ? filtre.value : '').split(/\s+/).filter(Boolean);
     document.querySelectorAll('main .carte[data-search]').forEach(function (carte) {
-      var textOk = q === '' || carte.getAttribute('data-search').indexOf(q) !== -1;
+      var textOk = correspond(carte, 'data-search', mots);
       var mat = carte.getAttribute('data-maturity') || '';
       var matOk = maturityFilter === '' || mat === maturityFilter;
       var plat = carte.getAttribute('data-platform') || '';
       var platOk = platformFilter === '' || plat === platformFilter;
       carte.hidden = !(textOk && matOk && platOk);
     });
-    document.querySelectorAll('main > section').forEach(function (sec) {
-      if (sec.classList.contains('coulisses')) return;
-      var cartes = sec.querySelectorAll('.carte');
-      if (!cartes.length) return;
-      var visible = false;
-      cartes.forEach(function (c) {
-        if (!c.hidden) visible = true;
+    // Les guides et les coulisses ne sont pas des applications : ni maturité
+    // ni plateforme, mais le texte cherché les concerne autant. Ils restaient
+    // tous affichés sous une recherche qui ne trouvait qu'une application.
+    document.querySelectorAll('main [data-recherche]').forEach(function (el) {
+      el.hidden = !correspond(el, 'data-recherche', mots);
+    });
+    // Un groupe de guides, puis une section, sans rien de visible disparaît.
+    document.querySelectorAll('main > section, main .guides-groupe').forEach(function (sec) {
+      var trouves = sec.querySelectorAll('.carte[data-search], [data-recherche]');
+      if (!trouves.length) return;
+      sec.hidden = !Array.prototype.some.call(trouves, function (el) {
+        return !el.hidden;
       });
-      sec.hidden = !visible;
     });
     updateCompte();
     syncFiltresBadge();

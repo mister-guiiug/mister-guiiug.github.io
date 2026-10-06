@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import vm from 'node:vm';
 import { rendreAccueil } from '../scripts/accueil.mjs';
 import { DESCRIPTIONS_EN, appsSansDescriptionEn } from '../scripts/descriptions-en.mjs';
 import { donneesFactices } from './catalogue-factice.mjs';
@@ -124,4 +125,53 @@ test('palette : écrite une fois, posée dans les deux contextes sombres et sur 
 test('guides : le nom de l’app et « Read in English » font 24 px de haut au moins', () => {
   assert.match(CSS, /\.guide-meta a \{\s*display: inline-block;\s*min-height: 1\.5rem;\s*line-height: 1\.5rem;/);
   assert.match(CSS, /\.guide-titre \{[^}]*line-height: 1\.5rem;/);
+});
+
+const CLIENT = readFileSync(new URL('../scripts/accueil/hub-client.js', import.meta.url), 'utf8');
+
+test('recherche : une carte masquée l’est vraiment, malgré son display: flex', () => {
+  // « 1 sur 21 » au-dessus de trois cartes : `hidden` posé, `.carte` le recouvrait.
+  assert.match(CSS, /\.carte \{[^}]*display: flex;/);
+  assert.match(CSS, /\[hidden\] \{\s*display: none !important;\s*\}/);
+});
+
+test('recherche : sans accents, chaque mot dans n’importe quel ordre', () => {
+  const fonction = nom => new RegExp(`  function ${nom}\\([\\s\\S]*?\\n  }\\n`).exec(CLIENT)[0];
+  const ctx = vm.createContext({});
+  vm.runInContext(`${fonction('plie')}${fonction('correspond')}this.plie = plie; this.correspond = correspond;`, ctx);
+  const el = texte => ({ getAttribute: () => texte });
+  const cherche = (texte, q) => ctx.correspond(el(texte), 'data-search', ctx.plie(q).split(/\s+/).filter(Boolean));
+  assert.equal(cherche('mister mölkky compteur de scores', 'molkky'), true);
+  assert.equal(cherche('miss contraction minuteur de contractions', 'Contraction'), true);
+  assert.equal(cherche('miss contraction minuteur de contractions', 'minuteur miss'), true);
+  assert.equal(cherche('miss contraction minuteur de contractions', 'contraction dés'), false);
+  assert.equal(cherche('mister cim10 aide au codage', 'contraction'), false);
+  assert.equal(cherche('santé', 'sante'), true);
+  assert.equal(cherche(null, ''), true, 'une recherche vide garde tout');
+});
+
+test('recherche : les guides et les coulisses portent le texte qu’elle lit', () => {
+  const { html } = rendreAccueil(
+    donneesFactices({
+      pagesParSite: new Map([
+        ['le-socle', [{ url: 'https://exemple.github.io/le-socle/guide.html', titre: 'Guide du socle', langue: 'fr', alternates: {} }]],
+      ]),
+    })
+  );
+  const guides = [...html.matchAll(/<li class="guide"[^>]*>/g)].map(m => m[0]);
+  assert.ok(guides.length >= 2);
+  for (const li of guides) assert.match(li, /data-recherche="[^"]+"/, li);
+  // Le titre, échappé : le piège du catalogue factice n'ouvre aucune balise.
+  assert.match(html, /<li class="carte" data-recherche="le &lt;socle&gt; &quot;commun&quot; infrastructure [^"]*guide du socle">/);
+  // Ni l'un ni l'autre n'est une application : le compte « n sur 21 » les ignore.
+  assert.doesNotMatch(html, /<li class="(?:guide|carte)" data-recherche="[^"]*"[^>]*data-search=/);
+});
+
+test('recherche : un lien /?q=… garde sa recherche jusqu’à la lecture de l’URL', () => {
+  // `applyLang` passe avant `readUrl` et réécrit l'URL : sans ce verrou, elle
+  // perdait ses filtres avant d'avoir été lue.
+  assert.match(CLIENT, /var syncingUrl = true;/);
+  assert.ok(CLIENT.indexOf('applyLang(lang());') < CLIENT.indexOf('readUrl();\n'), 'ordre d’amorçage');
+  assert.match(CLIENT, /function writeUrl\(\) \{\s*if \(syncingUrl\) return;/);
+  assert.match(CLIENT, /function readUrl\(\) \{[\s\S]*?syncingUrl = false;\s*\}/);
 });
