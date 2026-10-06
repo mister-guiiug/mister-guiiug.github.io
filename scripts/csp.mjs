@@ -13,7 +13,8 @@
  *   - style-src : l'empreinte de chaque élément `<style>`. La page n'a aucun
  *     attribut `style` (un test le garde) ; son script ne touche au style que
  *     par l'objet `style` (CSSOM), que la politique ne régit pas ;
- *   - img-src : l'origine de la famille, d'où viennent aperçus et icônes ;
+ *   - img-src : l'origine de la famille, d'où viennent aperçus, icônes et le
+ *     ciel du fond — servi en fichier pour cette raison, pas en `data:` ;
  *   - connect-src 'none' : la page ne lit rien par fetch ;
  *   - worker-src : `sw.js` seul ; manifest-src : le manifeste seul ;
  *   - default-src, object-src, base-uri, form-action : 'none'.

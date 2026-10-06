@@ -70,6 +70,7 @@ import { collecter, lireOctets } from './collecte.mjs';
 import { adresseApercu, versApercu } from './apercu.mjs';
 import { JETON_CSP, poserPolitique } from './csp.mjs';
 import { DESCRIPTIONS_EN, appsSansDescriptionEn } from './descriptions-en.mjs';
+import { FICHIERS_DU_CIEL, cielSvg } from './ciel.mjs';
 import { serviceWorkerHub } from './hub-sw.mjs';
 import { manifesteHub } from './manifeste-hub.mjs';
 import { INDEXNOW_CLE } from './indexnow-cle.mjs';
@@ -343,6 +344,9 @@ const CHEMINS_DU_HUB = [
   '/icon-192.png',
   '/icon-512.png',
   '/apple-touch-icon.png',
+  // Le ciel du fond (scripts/ciel.mjs) : sans lui dans la liste, la page
+  // ouverte hors ligne perdait ses étoiles.
+  ...Object.values(FICHIERS_DU_CIEL).map(f => `/${f}`),
   ...(command ? ['/command.js', '/hub-command.js'] : []),
 ];
 
@@ -368,14 +372,17 @@ const sw = serviceWorkerHub({
     '/icon-512.png',
   ]),
   // La miniature du projecteur, si elle existe ; sans sharp, pas de WebP.
-  extras: sousChemin(
-    featuredId && apercus.has(featuredId)
+  // La miniature du projecteur et le ciel : précachés si possible, sans
+  // faire échouer l'installation.
+  extras: sousChemin([
+    ...Object.values(FICHIERS_DU_CIEL).map(f => `/${f}`),
+    ...(featuredId && apercus.has(featuredId)
       ? [
           `/previews/${featuredId}.jpg`,
           ...(apercus.get(featuredId).webp ? [`/previews/${featuredId}.webp`] : []),
         ]
-      : []
-  ),
+      : []),
+  ]),
   horsLigne: `${SOUS_CHEMIN}/offline.html`,
 });
 
@@ -548,6 +555,9 @@ writeFileSync(
   'utf8'
 );
 writeFileSync(join(SORTIE, 'sw.js'), sw, 'utf8');
+for (const [theme, fichier] of Object.entries(FICHIERS_DU_CIEL)) {
+  writeFileSync(join(SORTIE, fichier), cielSvg(theme), 'utf8');
+}
 // `/sitemap.xml` est l'INDEX ; les URL du hub sont dans `/sitemap-hub.xml`.
 writeFileSync(join(SORTIE, 'sitemap.xml'), indexPlans, 'utf8');
 writeFileSync(join(SORTIE, 'sitemap-hub.xml'), planHub, 'utf8');
