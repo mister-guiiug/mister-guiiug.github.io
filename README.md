@@ -104,6 +104,11 @@ catalogue sans description anglaise garde la française, marquée `lang="fr"`,
 et la construction la nomme dans un `::warning::`. Les palettes vivent dans
 `scripts/palette.mjs`, écrites une fois.
 
+**Le fond est un ciel.** En haut de la page, trois nuages de nébuleuse en dégradés : une aube pastel en clair, violet, bleu et rose en sombre. Ils s'effacent en descendant. Par-dessus, des constellations aux traits fins sur une poussière d'étoiles.
+- **Un fichier par thème.** `ciel-clair.svg` et `ciel-sombre.svg` sont engendrés par `scripts/ciel.mjs`, à partir d'une graine fixe : le même fichier à chaque construction.
+- **Pourquoi des fichiers et pas des images `data:`.** La politique de la page n'admet que l'origine en `img-src`. Servi depuis l'origine, le ciel se met en cache, et chaque visiteur ne télécharge que celui de son thème.
+- **La lisibilité est vérifiée.** `test/ciel.test.mjs` contrôle que le texte gris garde 4,5:1 même là où les trois nuages se superposeraient.
+
 **Une politique de sécurité du contenu**, en `<meta>`, est calculée à chaque
 construction (`scripts/csp.mjs`) : l'empreinte SHA-256 de chaque script et de
 chaque style écrits dans la page, l'adresse exacte des seuls fichiers

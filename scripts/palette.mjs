@@ -8,9 +8,22 @@
  * thème « système » sombre. Les jetons vivent ici ; la feuille de style de
  * l'accueil et le style des pages statiques les reçoivent à la construction.
  *
- * Le motif du fond de l'accueil, un halo et des points, fait partie de la
- * palette : il changeait avec elle, dans trois règles qui se recouvraient.
+ * Le motif du fond de l'accueil fait partie de la palette : il changeait avec
+ * elle, dans trois règles qui se recouvraient. C'est un ciel — trois nuages de
+ * nébuleuse en dégradés, qui s'effacent en descendant, puis des constellations
+ * sur une poussière d'étoiles, un fichier SVG par thème (scripts/ciel.mjs).
+ * Une aube pastel en clair, une nuit en sombre.
+ *
+ * LES NUAGES TEINTENT LE FOND DERRIÈRE DU TEXTE : le titre des sections, le
+ * compte, le pied de page. Leurs opacités sont réglées pour que le texte gris
+ * (--doux) garde 4,5:1 même là où les trois se superposeraient
+ * (test/ciel.test.mjs le vérifie).
  */
+import { FICHIERS_DU_CIEL, TUILE } from './ciel.mjs';
+
+/** Les nuages : ellipse, position, teinte. Trois couches qui ne se répètent pas. */
+const nuage = (forme, teinte) => `radial-gradient(${forme}, ${teinte}, transparent 70%)`;
+const FORMES = ['ellipse 60% 45% at 8% 0%', 'ellipse 55% 40% at 92% 6%', 'ellipse 70% 32% at 55% 36%'];
 
 /** Le thème clair : toutes les couleurs de l'accueil, et son motif. */
 export const CLAIR = {
@@ -31,12 +44,16 @@ export const CLAIR = {
   // « Non vérifiée » : une teinte, et le texte qui la lit au-dessus de 4,5:1.
   panne: '#b45309',
   'panne-fg': '#9a3412',
+  // Lilas, ciel et pêche : une aube. L'URL est RELATIVE, pour que l'aperçu
+  // local, servi sous un chemin, trouve son fichier.
   motif: [
-    'radial-gradient(ellipse 90% 55% at 50% -15%, color-mix(in srgb, var(--lien) 16%, transparent), transparent 70%)',
-    'radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--texte) 4%, transparent) 0 1px, transparent 1.5px)',
-    'radial-gradient(circle at 78% 32%, color-mix(in srgb, var(--texte) 3.5%, transparent) 0 1px, transparent 1.5px)',
+    nuage(FORMES[0], 'rgb(167 139 250 / 0.24)'),
+    nuage(FORMES[1], 'rgb(56 189 248 / 0.18)'),
+    nuage(FORMES[2], 'rgb(251 146 60 / 0.1)'),
+    `url("${FICHIERS_DU_CIEL.clair}")`,
   ],
-  'motif-taille': 'auto, 3.2rem 3.2rem, 4.1rem 4.1rem',
+  'motif-taille': `100% 1600px, 100% 1600px, 100% 1600px, ${TUILE.largeur}px ${TUILE.hauteur}px`,
+  'motif-repete': 'no-repeat, no-repeat, no-repeat, repeat',
 };
 
 /** Le thème sombre : ce qui change par rapport au clair, et rien d'autre. */
@@ -56,13 +73,14 @@ export const SOMBRE = {
   'beta-bd': '#3d7a68',
   chrome: '#0f1220',
   'panne-fg': '#fdba74',
+  // Violet, bleu et rose : une nébuleuse. Mêmes couches qu'en clair : la
+  // taille et la répétition du thème clair valent aussi ici.
   motif: [
-    'radial-gradient(ellipse 90% 55% at 50% -15%, color-mix(in srgb, var(--lien) 22%, transparent), transparent 70%)',
-    'radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--texte) 14%, transparent) 0 1.15px, transparent 1.8px)',
-    'radial-gradient(circle at 78% 32%, color-mix(in srgb, var(--texte) 11%, transparent) 0 1px, transparent 1.6px)',
-    'radial-gradient(circle at 42% 70%, color-mix(in srgb, var(--texte) 9%, transparent) 0 1px, transparent 1.5px)',
+    nuage(FORMES[0], 'rgb(124 58 237 / 0.26)'),
+    nuage(FORMES[1], 'rgb(14 165 233 / 0.17)'),
+    nuage(FORMES[2], 'rgb(236 72 153 / 0.1)'),
+    `url("${FICHIERS_DU_CIEL.sombre}")`,
   ],
-  'motif-taille': 'auto, 2.8rem 2.8rem, 3.6rem 3.6rem, 4.4rem 4.4rem',
 };
 
 /** Les jetons que lisent aussi les pages statiques. */

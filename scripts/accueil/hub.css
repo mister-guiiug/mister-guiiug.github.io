@@ -36,9 +36,11 @@ body {
     max(1.25rem, env(safe-area-inset-right, 0px))
     max(4rem, env(safe-area-inset-bottom, 0px))
     max(1.25rem, env(safe-area-inset-left, 0px));
-  /* Le halo et les points viennent de la palette (--motif). */
+  /* Le ciel vient de la palette (--motif) : les nuages ne se répètent pas, les
+     étoiles si. */
   background: var(--motif), var(--fond);
   background-size: var(--motif-taille), auto;
+  background-repeat: var(--motif-repete), repeat;
   color: var(--texte);
   font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   line-height: 1.6;
