@@ -52,8 +52,10 @@ export const stylesEnLigne = html =>
  * @param {string|null} [p.apercu]      l'adresse d'un aperçu local (voir apercu.mjs) :
  *   les fichiers du hub y sont servis, les icônes des apps restent sur l'origine
  * @param {string[]} [p.scripts]        les adresses complètes des scripts externes
+ * @param {string} [p.manifeste]         le chemin du manifeste de la page : chaque
+ *   langue a le sien (`/en/manifest.webmanifest`)
  */
-export function politiqueAccueil(html, { origine, apercu = null, scripts = [] }) {
+export function politiqueAccueil(html, { origine, apercu = null, scripts = [], manifeste = '/manifest.webmanifest' }) {
   const hub = apercu ?? origine;
   return [
     "default-src 'none'",
@@ -62,7 +64,7 @@ export function politiqueAccueil(html, { origine, apercu = null, scripts = [] })
     ['img-src', origine, ...(apercu ? [`${apercu}/`] : [])].join(' '),
     "connect-src 'none'",
     `worker-src ${hub}/sw.js`,
-    `manifest-src ${hub}/manifest.webmanifest`,
+    `manifest-src ${hub}${manifeste}`,
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",

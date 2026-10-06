@@ -18,16 +18,19 @@
  * installée. Le changer créerait une seconde application ; le garder fait que
  * Chrome met à jour celle qui est installée, portée comprise.
  */
-export function manifesteHub({ origine, compte, description, theme }) {
+export function manifesteHub({ origine, compte, description, theme, langue = 'fr' }) {
+  // L'ANGLAIS A SON MANIFESTE, sous /en/ : une autre application installable,
+  // dans sa langue, dont la portée ne couvre elle aussi aucune application.
+  const en = langue === 'en';
   return {
-    id: `${origine}/`,
-    name: `Les applications de ${compte}`,
+    id: en ? `${origine}/en/` : `${origine}/`,
+    name: en ? `Apps by ${compte}` : `Les applications de ${compte}`,
     short_name: 'GuiiuG',
     description,
-    lang: 'fr',
+    lang: langue,
     dir: 'ltr',
-    start_url: `${origine}/index.html`,
-    scope: `${origine}/index.html`,
+    start_url: en ? `${origine}/en/` : `${origine}/index.html`,
+    scope: en ? `${origine}/en/` : `${origine}/index.html`,
     display: 'standalone',
     background_color: theme,
     theme_color: theme,

@@ -50,10 +50,12 @@ test('descriptions anglaises : miss-devises en a une, et les manquantes sont nom
 });
 
 test('descriptions anglaises : une carte sans traduction garde le français, marqué lang="fr"', () => {
-  const { html } = rendreAccueil(donneesFactices());
-  // Miss Alpha a sa description anglaise ; Mister Beta non.
-  assert.match(html, /<p data-fr="D[^"]*" data-en="Described &lt;b&gt;in English&lt;\/b&gt;\.">/);
-  assert.match(html, /<p lang="fr" data-fr="Une application en bêta\." data-en="Une application en bêta\.">/);
+  const { pages } = rendreAccueil(donneesFactices());
+  const en = pages.find(p => p.chemin === '/en/').texte;
+  // Miss Alpha a sa description anglaise ; Mister Beta non : en anglais, sa
+  // carte garde le français, dit tel.
+  assert.match(en, /<p>Described &lt;b&gt;in English&lt;\/b&gt;\.<\/p>/);
+  assert.match(en, /<p lang="fr">Une application en bêta\.<\/p>/);
 });
 
 /** Les jetons d'un bloc de la feuille de style, par sélecteur exact. */
@@ -151,14 +153,17 @@ test('recherche : sans accents, chaque mot dans n’importe quel ordre', () => {
 });
 
 test('recherche : les guides et les coulisses portent le texte qu’elle lit', () => {
-  const { html } = rendreAccueil(
+  const { pages } = rendreAccueil(
     donneesFactices({
       pagesParSite: new Map([
         ['le-socle', [{ url: 'https://exemple.github.io/le-socle/guide.html', titre: 'Guide du socle', langue: 'fr', alternates: {} }]],
       ]),
     })
   );
-  const guides = [...html.matchAll(/<li class="guide"[^>]*>/g)].map(m => m[0]);
+  const html = pages.find(p => p.chemin === '/').texte;
+  // Les guides ont leur page : c'est là qu'ils portent leur texte.
+  const index = pages.find(p => p.chemin === '/guides.html').texte;
+  const guides = [...index.matchAll(/<li class="guide"[^>]*>/g)].map(m => m[0]);
   assert.ok(guides.length >= 2);
   for (const li of guides) assert.match(li, /data-recherche="[^"]+"/, li);
   // Le titre, échappé : le piège du catalogue factice n'ouvre aucune balise.
@@ -168,10 +173,10 @@ test('recherche : les guides et les coulisses portent le texte qu’elle lit', (
 });
 
 test('recherche : un lien /?q=… garde sa recherche jusqu’à la lecture de l’URL', () => {
-  // `applyLang` passe avant `readUrl` et réécrit l'URL : sans ce verrou, elle
-  // perdait ses filtres avant d'avoir été lue.
+  // Une mise à jour passée avant `readUrl` réécrivait l'URL : sans ce verrou,
+  // elle perdait ses filtres avant d'avoir été lue.
   assert.match(CLIENT, /var syncingUrl = true;/);
-  assert.ok(CLIENT.indexOf('applyLang(lang());') < CLIENT.indexOf('readUrl();\n'), 'ordre d’amorçage');
+  assert.ok(CLIENT.indexOf('appliqueTitre();\n') < CLIENT.indexOf('readUrl();\n'), 'ordre d’amorçage');
   assert.match(CLIENT, /function writeUrl\(\) \{\s*if \(syncingUrl\) return;/);
   assert.match(CLIENT, /function readUrl\(\) \{[\s\S]*?syncingUrl = false;\s*\}/);
 });
