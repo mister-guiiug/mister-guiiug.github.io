@@ -43,15 +43,15 @@ test('le texte gris garde 4,5:1 là où les trois nuages se superposeraient', ()
   }
 });
 
-test('chaque thème a son fichier de ciel, relatif, et autant de couches que de tailles et de répétitions', () => {
+test('chaque thème a son fichier de ciel, depuis l’origine, et autant de couches que de tailles et de répétitions', () => {
   const couches = v => v.split(/,(?![^(]*\))/).length;
   for (const [theme, p] of [
     ['clair', CLAIR],
     ['sombre', { ...CLAIR, ...SOMBRE }],
   ]) {
-    assert.equal(p.motif.at(-1), `url("${FICHIERS_DU_CIEL[theme]}")`, theme);
-    // Relatif : l'aperçu local, servi sous un chemin, trouve son fichier.
-    assert.doesNotMatch(p.motif.at(-1), /url\("\//);
+    // Depuis l'origine : relative, l'adresse visait /en/ciel-….svg depuis la
+    // page anglaise. Le rendu pose l'origine, l'aperçu local la réécrit.
+    assert.equal(p.motif.at(-1), `url("__HUB_ORIGINE__/${FICHIERS_DU_CIEL[theme]}")`, theme);
     assert.equal(couches(p['motif-taille']), p.motif.length, `${theme} : tailles`);
     assert.equal(couches(p['motif-repete']), p.motif.length, `${theme} : répétitions`);
   }

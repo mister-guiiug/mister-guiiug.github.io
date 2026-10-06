@@ -1,5 +1,9 @@
 (function () {
-  var I18N = __HUB_I18N__;
+  // LES LIBELLÉS DE LA PAGE, DANS SA LANGUE. La page arrive traduite (voir
+  // scripts/traduire.mjs) : le script ne garde que ce qui change après coup —
+  // le compte filtré, « Réduire », la mention « nouvel onglet », le titre de la
+  // fenêtre installée.
+  var T = __HUB_I18N__;
   var HASARD = __HUB_HASARD__;
   var root = document.documentElement;
   var themeMeta = document.getElementById('theme-color');
@@ -16,16 +20,12 @@
   var sortMode = 'stable';
   var activeCat = '';
   var deferredPrompt = null;
-  // VRAI JUSQU'À LA LECTURE DE L'URL. `applyLang` passe avant `readUrl` et
-  // réécrit l'URL depuis des filtres encore vides : un lien `/?q=contraction`
-  // perdait sa recherche avant d'avoir été lu.
+  // VRAI JUSQU'À LA LECTURE DE L'URL. Une mise à jour du compte passée avant
+  // `readUrl` réécrivait l'URL depuis des filtres encore vides : un lien
+  // `/?q=contraction` perdait sa recherche avant d'avoir été lu.
   var syncingUrl = true;
   var compteTimer = null;
   var ROBOT = __HUB_ROBOT__;
-
-  function lang() {
-    return root.lang === 'en' ? 'en' : 'fr';
-  }
 
   function theme() {
     return root.dataset.theme || 'system';
@@ -33,81 +33,6 @@
 
   function isPwa() {
     return root.dataset.pwa === '1';
-  }
-
-  function applyLang(l) {
-    l = l === 'en' ? 'en' : 'fr';
-    root.lang = l;
-    try { localStorage.setItem('hub-lang', l); } catch (e) {}
-    var t = I18N[l];
-    var pwa = isPwa();
-    appliqueTitre();
-    var desc = document.querySelector('meta[name="description"]');
-    if (desc) desc.setAttribute('content', t.description);
-    document.querySelectorAll('[data-i18n]').forEach(function (el) {
-      var k = el.getAttribute('data-i18n');
-      if (pwa && el.hasAttribute('data-i18n-pwa')) {
-        k = el.getAttribute('data-i18n-pwa');
-      }
-      if (t[k]) el.textContent = t[k];
-    });
-    document.querySelectorAll('[data-i18n-aria]').forEach(function (el) {
-      var k = el.getAttribute('data-i18n-aria');
-      if (t[k]) {
-        el.setAttribute('aria-label', t[k]);
-        if (el.hasAttribute('title')) el.setAttribute('title', t[k]);
-      }
-    });
-    document.querySelectorAll('[data-i18n-placeholder]').forEach(function (el) {
-      var k = el.getAttribute('data-i18n-placeholder');
-      if (t[k]) el.setAttribute('placeholder', t[k]);
-    });
-    document.querySelectorAll('[data-i18n-cat]').forEach(function (el) {
-      var c = el.getAttribute('data-i18n-cat');
-      if (t.categories && t.categories[c]) el.textContent = t.categories[c];
-    });
-    document.querySelectorAll('[data-i18n-maturity]').forEach(function (el) {
-      var m = el.getAttribute('data-i18n-maturity');
-      if (t.maturity && t.maturity[m]) el.textContent = t.maturity[m];
-    });
-    document.querySelectorAll('[data-fr][data-en]').forEach(function (el) {
-      el.textContent = el.getAttribute(l === 'en' ? 'data-en' : 'data-fr');
-    });
-    // Un guide et sa traduction : l'adresse, sa langue et son titre
-    // suivent la langue choisie (scripts/guides.mjs).
-    ['href', 'hreflang', 'lang', 'title'].forEach(function (attr) {
-      document.querySelectorAll('[data-fr-' + attr + '][data-en-' + attr + ']').forEach(function (el) {
-        el.setAttribute(attr, el.getAttribute('data-' + l + '-' + attr));
-      });
-    });
-    // Les guides de la langue choisie en tête de leur groupe : dans le
-    // DOM, pas seulement à l'œil, pour que la tabulation suive.
-    document.querySelectorAll('.guides-liste').forEach(function (ul) {
-      var rang = function (li) {
-        var langues = (li.getAttribute('data-langues') || '').split(' ');
-        return langues.indexOf(l) >= 0 ? 0 : 1;
-      };
-      Array.prototype.slice
-        .call(ul.children)
-        .sort(function (a, b) {
-          return rang(a) - rang(b) || a.getAttribute('data-ordre') - b.getAttribute('data-ordre');
-        })
-        .forEach(function (li) {
-          ul.appendChild(li);
-        });
-    });
-    document.querySelectorAll('img[data-alt-fr][data-alt-en]').forEach(function (img) {
-      img.setAttribute('alt', img.getAttribute(l === 'en' ? 'data-alt-en' : 'data-alt-fr'));
-    });
-    document.querySelectorAll('[data-set-lang]').forEach(function (btn) {
-      btn.setAttribute('aria-pressed', btn.getAttribute('data-set-lang') === l ? 'true' : 'false');
-    });
-    var plus = document.getElementById('chapeau-plus');
-    var chapeau = document.getElementById('chapeau');
-    if (plus && chapeau) {
-      plus.textContent = chapeau.classList.contains('is-open') ? t.enSavoirMoins : t.enSavoirPlus;
-    }
-    updateCompte(true);
   }
 
   function mouvementReduit() {
@@ -161,15 +86,14 @@
   }
 
   function appliqueTitre() {
-    var t = I18N[lang()];
     var robot = ROBOT.test(navigator.userAgent || '');
-    document.title = t.titleCourt && estInstallee() && !robot ? t.titleCourt : t.title;
+    document.title = T.titleCourt && estInstallee() && !robot ? T.titleCourt : T.title;
   }
 
   // HORS DU SHELL, SEULEMENT UNE FOIS INSTALLÉ. Dans un onglet, un lien de la
   // famille s'ouvre sur place. Dans le hub installé, il ouvre le navigateur,
   // où chaque app reste installable à part ; le lien le dit pour l'oreille,
-  // dans la langue choisie (applyLang traduit la mention).
+  // dans la langue de la page.
   function ouvreHorsShell() {
     if (!estInstallee()) return;
     document.querySelectorAll('a[data-hors-shell]').forEach(function (a) {
@@ -178,8 +102,7 @@
       if (a.getAttribute('aria-hidden') === 'true' || a.hasAttribute('aria-label')) return;
       var mention = document.createElement('span');
       mention.className = 'sr-only';
-      mention.setAttribute('data-i18n', 'nouvelOnglet');
-      mention.textContent = ' ' + I18N[lang()].nouvelOnglet;
+      mention.textContent = ' ' + T.nouvelOnglet;
       a.appendChild(mention);
     });
   }
@@ -200,11 +123,23 @@
     var next = qs ? location.pathname + '?' + qs + location.hash : location.pathname + location.hash;
     var cur = location.pathname + location.search + location.hash;
     if (next !== cur) history.replaceState(null, '', next);
+    suitLaRecherche(qs);
+  }
+
+  /**
+   * L'autre langue garde la recherche : « /?q=dés » mène à « /en/?q=dés ». Le
+   * lien reste celui d'une page, le script n'y ajoute que la requête.
+   */
+  function suitLaRecherche(qs) {
+    document.querySelectorAll('a[data-lien-langue]:not([aria-current])').forEach(function (a) {
+      var base = a.getAttribute('href').split(/[?#]/)[0];
+      a.setAttribute('href', qs ? base + '?' + qs : base);
+    });
   }
 
   function updateCompte(immediate) {
     var run = function () {
-      var t = I18N[lang()];
+      var t = T;
       var visible = 0;
       document.querySelectorAll('main .carte[data-search]').forEach(function (carte) {
         if (!carte.hidden) visible += 1;
@@ -388,11 +323,6 @@
     }
   }
 
-  document.querySelectorAll('[data-set-lang]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      applyLang(btn.getAttribute('data-set-lang'));
-    });
-  });
   document.querySelectorAll('[data-set-theme]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       applyTheme(btn.getAttribute('data-set-theme'), true);
@@ -499,13 +429,13 @@
     if (loadUi('hub-chapeau') === '1') {
       chapeau.classList.add('is-open');
       chapeauPlus.setAttribute('aria-expanded', 'true');
-      chapeauPlus.textContent = I18N[lang()].enSavoirMoins;
+      chapeauPlus.textContent = T.enSavoirMoins;
     }
     chapeauPlus.addEventListener('click', function () {
       var open = !chapeau.classList.contains('is-open');
       chapeau.classList.toggle('is-open', open);
       chapeauPlus.setAttribute('aria-expanded', open ? 'true' : 'false');
-      chapeauPlus.textContent = open ? I18N[lang()].enSavoirMoins : I18N[lang()].enSavoirPlus;
+      chapeauPlus.textContent = open ? T.enSavoirMoins : T.enSavoirPlus;
       saveUi('hub-chapeau', open ? '1' : '0');
     });
   }
@@ -621,7 +551,9 @@
 
   markImages();
   ouvreHorsShell();
-  applyLang(lang());
+  appliqueTitre();
+  // Installé, le chapeau dit que chaque app s'ouvre hors du catalogue.
+  if (isPwa() && chapeau && T.chapeauPwa) chapeau.textContent = T.chapeauPwa;
   applyTheme(theme());
   readUrl();
 

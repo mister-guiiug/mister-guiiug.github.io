@@ -281,8 +281,9 @@ console.log(
 // ---------------------------------------------------------------------------
 
 const {
-  html,
+  pages: pagesAccueil,
   description,
+  descriptionEn,
   featuredId,
   nbSections,
   nbGuides,
@@ -321,6 +322,13 @@ const manifeste = manifesteHub({
   description,
   theme: THEME,
 });
+const manifesteEn = manifesteHub({
+  origine: APERCU ?? FAMILY_ORIGIN,
+  compte: COMPTE,
+  description: descriptionEn,
+  theme: THEME,
+  langue: 'en',
+});
 
 /**
  * Les fichiers de premier niveau que sert le hub : les SEULS, avec
@@ -332,6 +340,12 @@ const manifeste = manifesteHub({
 const CHEMINS_DU_HUB = [
   '/',
   '/index.html',
+  // L'anglais et l'index des guides (scripts/accueil.mjs, ADRESSES).
+  '/en/',
+  '/en/index.html',
+  '/guides.html',
+  '/en/guides.html',
+  '/en/manifest.webmanifest',
   '/offline.html',
   '/404.html',
   '/a-propos.html',
@@ -473,7 +487,9 @@ const html404 = page404({
  * elle porte `noindex`, et un plan de site ne liste que des pages à indexer.
  */
 const pagesDuPlan = [
-  { chemin: '/', fichier: 'index.html', texte: html },
+  // L'accueil et l'index des guides, en français et en anglais : ils portent
+  // la politique de l'accueil (script et styles en ligne, voir plus bas).
+  ...pagesAccueil.map(p => ({ chemin: p.chemin, fichier: p.fichier, texte: p.texte, accueil: true, langue: p.langue })),
   { chemin: '/a-propos.html', fichier: 'a-propos.html', texte: aProposHtml },
   ...pagesBureauHtml.map(p => ({ chemin: p.chemin, fichier: p.chemin.slice(1), texte: p.texte })),
 ];
@@ -525,12 +541,14 @@ const pagesDatees = pagesDuPlan.map(p => ({ ...p, texte: dater(p.texte, lastmodD
  * (voir scripts/csp.mjs). Le module Ctrl+K n'y figure que s'il est publié.
  */
 for (const p of pagesDatees) {
-  if (p.fichier !== 'index.html') continue;
+  if (!p.accueil) continue;
   const hub = APERCU ?? FAMILY_ORIGIN;
   p.texte = poserPolitique(versApercu(p.texte, { origine: FAMILY_ORIGIN, apercu: APERCU }), {
     origine: FAMILY_ORIGIN,
     apercu: APERCU,
     scripts: command ? [`${hub}/hub-command.js`, `${hub}/command.js`] : [],
+    // `hub` porte déjà le chemin de l'aperçu.
+    manifeste: `${p.langue === 'en' ? '/en' : ''}/manifest.webmanifest`,
   });
 }
 
@@ -543,6 +561,7 @@ for (const { fichier, texte } of [...pagesDatees, { fichier: '404.html', texte: 
   }
 }
 
+mkdirSync(join(SORTIE, 'en'), { recursive: true });
 for (const { fichier, texte } of pagesDatees) writeFileSync(join(SORTIE, fichier), texte, 'utf8');
 // GitHub Pages sert `/404.html` pour toute URL inconnue sous la racine, avec le
 // statut 404 ; `noindex` en plus, par principe.
@@ -552,6 +571,11 @@ writeFileSync(join(SORTIE, 'robots.txt'), robots, 'utf8');
 writeFileSync(
   join(SORTIE, 'manifest.webmanifest'),
   JSON.stringify(manifeste, null, 2) + '\n',
+  'utf8'
+);
+writeFileSync(
+  join(SORTIE, 'en', 'manifest.webmanifest'),
+  JSON.stringify(manifesteEn, null, 2) + '\n',
   'utf8'
 );
 writeFileSync(join(SORTIE, 'sw.js'), sw, 'utf8');
@@ -622,7 +646,7 @@ console.log(
   `\nÉcrit dans ${SORTIE}/ : index.html (${FAMILY_APPS.length} applications en ` +
     `${nbSections} catégories, ${coulisses.length} en coulisses, ${nbGuides} guides), ` +
     `${pagesDuPlan
-      .slice(1)
+      .filter(p => p.fichier !== 'index.html')
       .map(p => p.fichier)
       .join(', ')}, 404.html, robots.txt, sitemap.xml (index de ` +
     `${plansDuParc.length + 1} plans), sitemap-hub.xml (${pagesDuPlan.length} URL), seo-state.json, ` +

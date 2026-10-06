@@ -19,19 +19,26 @@ const scriptsEnLigne = html =>
   [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
 
 test('accueil : les noms, descriptions et titres du catalogue sont échappés', () => {
-  const { html } = rendreAccueil(donnees());
-  assert.ok(!html.includes('<Alpha>'), 'un nom d’app ouvre une balise');
-  assert.ok(!html.includes('<du>'), 'un titre de guide ouvre une balise');
-  assert.ok(!html.includes('<socle>'), 'un titre de site ouvre une balise');
-  assert.ok(!html.includes('<b>in English</b>'), 'une description anglaise ouvre une balise');
-  assert.ok(!html.includes('<script>alert(1)'), 'une description injecte un script');
-  assert.match(html, /<span class="nom">Miss &lt;Alpha&gt; &amp; &quot;Co&quot;<\/span>/);
-  assert.match(html, /data-en="Described &lt;b&gt;in English&lt;\/b&gt;\."/);
-  // Toute balise <script> ouverte est refermée par la sienne, et par elle seule.
-  assert.equal(
-    (html.match(/<script[\s>]/g) ?? []).length,
-    (html.match(/<\/script>/g) ?? []).length
-  );
+  const { pages } = rendreAccueil(donnees());
+  // Les quatre pages : l'accueil et l'index des guides, dans chaque langue.
+  assert.equal(pages.length, 4);
+  for (const { chemin, texte: html } of pages) {
+    assert.ok(!html.includes('<Alpha>'), `${chemin} : un nom d’app ouvre une balise`);
+    assert.ok(!html.includes('<du>'), `${chemin} : un titre de guide ouvre une balise`);
+    assert.ok(!html.includes('<socle>'), `${chemin} : un titre de site ouvre une balise`);
+    assert.ok(!html.includes('<b>in English</b>'), `${chemin} : une description anglaise ouvre une balise`);
+    assert.ok(!html.includes('<script>alert(1)'), `${chemin} : une description injecte un script`);
+    // Toute balise <script> ouverte est refermée par la sienne, et par elle seule.
+    assert.equal(
+      (html.match(/<script[\s>]/g) ?? []).length,
+      (html.match(/<\/script>/g) ?? []).length,
+      chemin
+    );
+  }
+  const [fr, en] = [pages.find(p => p.chemin === '/'), pages.find(p => p.chemin === '/en/')];
+  assert.match(fr.texte, /<span class="nom">Miss &lt;Alpha&gt; &amp; &quot;Co&quot;<\/span>/);
+  // Traduite à la construction, échappée comme le reste.
+  assert.match(en.texte, />Described &lt;b&gt;in English&lt;\/b&gt;\.<\/p>/);
 });
 
 test('accueil : les URL du catalogue restent dans leur attribut', () => {
@@ -54,13 +61,22 @@ test('accueil : les données en ligne sont du JSON valide, sans « < » brut', (
     [`${ORIGINE}/miss-alpha/`, `${ORIGINE}/mister-beta/?x="y"&z=<w>`, `${ORIGINE}/mister-bureau.html`]
   );
 
-  const client = scriptsEnLigne(html).find(s => s.includes('var I18N = '));
-  assert.ok(client, 'script client absent');
-  const i18n = /var I18N = (.*);\n/.exec(client)?.[1];
-  assert.ok(i18n && !i18n.includes('<'));
-  const libelles = JSON.parse(i18n);
-  assert.deepEqual(Object.keys(libelles.fr).sort(), Object.keys(libelles.en).sort());
-  const hasard = JSON.parse(/var HASARD = (.*);\n/.exec(client)?.[1]);
+  // Chaque page n'embarque que SES libellés, dans SA langue : les deux langues
+  // ont les mêmes clés.
+  const libellesDe = texte => {
+    const client = scriptsEnLigne(texte).find(s => s.includes('var T = '));
+    assert.ok(client, 'script client absent');
+    const json = /var T = (.*);\n/.exec(client)?.[1];
+    assert.ok(json && !json.includes('<'));
+    return { client, libelles: JSON.parse(json) };
+  };
+  const { pages } = rendreAccueil(donnees());
+  const fr = libellesDe(pages.find(p => p.chemin === '/').texte);
+  const en = libellesDe(pages.find(p => p.chemin === '/en/').texte);
+  assert.deepEqual(Object.keys(fr.libelles).sort(), Object.keys(en.libelles).sort());
+  assert.equal(fr.libelles.ouvrir, 'Ouvrir');
+  assert.equal(en.libelles.ouvrir, 'Open');
+  const hasard = JSON.parse(/var HASARD = (.*);\n/.exec(fr.client)?.[1]);
   assert.deepEqual(hasard, [`${ORIGINE}/miss-alpha/`]);
 });
 
@@ -78,9 +94,10 @@ test('accueil : structure, une section par catégorie peuplée, une carte par ap
   assert.equal((html.match(/data-search="/g) ?? []).length, 3);
   // Une app de bureau mène à sa page du hub, pas à son dépôt.
   assert.match(html, /<a href="https:\/\/exemple\.github\.io\/mister-bureau\.html" class="action action-ouvrir">/);
-  // Le guide de Miss Alpha est listé, avec son titre pour ancre.
+  // Le guide de Miss Alpha est listé sur sa page ; l'accueil y renvoie.
   assert.equal(nbGuides, 1);
-  assert.match(html, /<section class="guides" aria-labelledby="guides">/);
+  assert.match(html, /<section class="guides-renvoi" aria-labelledby="guides">/);
+  assert.doesNotMatch(html, /<li class="guide"/);
   // Aucune app au catalogue sous l'identifiant du projecteur : la première stable avec image.
   assert.equal(featuredId, 'miss-alpha');
   assert.match(description, /^Les applications web installables de exemple : /);
@@ -89,25 +106,31 @@ test('accueil : structure, une section par catégorie peuplée, une carte par ap
 });
 
 test('accueil : un h1 qui dit ce qu’est la page, la marque restant visible', () => {
-  const { html } = rendreAccueil(donnees());
-  const h1 = [...html.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/g)].map(m => m[1]);
-  assert.deepEqual(h1, ['Les applications de exemple']);
-  assert.match(html, /<p class="marque" data-i18n="marque">GuiiuG<\/p>/);
-  const libelles = JSON.parse(/var I18N = (.*);\n/.exec(html)[1]);
-  assert.equal(libelles.fr.titre, 'Les applications de exemple');
-  assert.equal(libelles.en.titre, 'Apps by exemple');
+  const { pages } = rendreAccueil(donnees());
+  const h1 = texte => [...texte.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/g)].map(m => m[1]);
+  const page = chemin => pages.find(p => p.chemin === chemin).texte;
+  assert.deepEqual(h1(page('/')), ['Les applications de exemple']);
+  assert.deepEqual(h1(page('/en/')), ['Apps by exemple']);
+  // L'index des guides a le sien ; l'identité y ramène à l'accueil.
+  assert.deepEqual(h1(page('/guides.html')), ['Guides pratiques']);
+  assert.deepEqual(h1(page('/en/guides.html')), ['Practical guides']);
+  assert.match(page('/en/guides.html'), /<p class="titre"><a href="https:\/\/exemple\.github\.io\/en\/">Apps by exemple<\/a><\/p>/);
+  for (const { texte } of pages) assert.match(texte, /<p class="marque">GuiiuG<\/p>/);
 });
 
-test('accueil : deux groupes de préférences, deux légendes distinctes', () => {
-  const { html } = rendreAccueil(donnees());
-  const legendes = [...html.matchAll(/<legend data-i18n="([^"]+)">([^<]*)<\/legend>/g)].map(m => [m[1], m[2]]);
-  assert.deepEqual(legendes, [
-    ['langue', 'Langue'],
-    ['themeLegende', 'Thème'],
-  ]);
-  const libelles = JSON.parse(/var I18N = (.*);\n/.exec(html)[1]);
-  assert.equal(libelles.en.langue, 'Language');
-  assert.equal(libelles.en.themeLegende, 'Theme');
+test('accueil : la langue par deux liens, le thème par un groupe de boutons', () => {
+  const { pages } = rendreAccueil(donnees());
+  for (const { chemin, langue, texte } of pages) {
+    const legendes = [...texte.matchAll(/<legend>([^<]*)<\/legend>/g)].map(m => m[1]);
+    assert.deepEqual(legendes, [langue === 'en' ? 'Theme' : 'Thème'], chemin);
+    assert.match(texte, new RegExp(`<nav class="langues" aria-label="${langue === 'en' ? 'Language' : 'Langue'}">`), chemin);
+    // La langue de la page est la page courante ; l'autre, un lien vers sa traduction.
+    const liens = [...texte.matchAll(/<a href="([^"]+)" hreflang="(fr|en)" lang="\2"[^>]*data-lien-langue>/g)];
+    assert.deepEqual(liens.map(m => m[2]), ['fr', 'en'], chemin);
+    const courant = liens.find(m => m[0].includes('aria-current="page"'));
+    assert.equal(courant?.[2], langue, chemin);
+  }
+  assert.doesNotMatch(pages[0].texte, /data-set-lang/);
 });
 
 test('accueil : recherche et filtres dans un repère, barre collante enfant de body', () => {
@@ -131,11 +154,14 @@ test('accueil : recherche et filtres dans un repère, barre collante enfant de b
 test('accueil : le bandeau de publication partielle porte son texte dans le HTML servi', () => {
   const sans = rendreAccueil(donnees()).html;
   assert.ok(!sans.includes('bandeau-panne"'), 'pas de bandeau sans panne');
-  const { html } = rendreAccueil(donnees({ enPanne: ['mister-beta (503)'] }));
-  const bandeau = /<p class="bandeau-panne" role="status" data-i18n="bandeauPanne">([^<]*)<\/p>/.exec(html)?.[1];
+  const { pages } = rendreAccueil(donnees({ enPanne: ['mister-beta (503)'] }));
+  const [html, en] = [pages.find(p => p.chemin === '/').texte, pages.find(p => p.chemin === '/en/').texte];
+  const bandeau = /<p class="bandeau-panne" role="status">([^<]*)<\/p>/.exec(html)?.[1];
   assert.ok(bandeau && bandeau.length > 20, `bandeau vide : ${JSON.stringify(bandeau)}`);
   assert.match(bandeau, /^Certaines applications du catalogue ne répondent pas/);
-  assert.match(html, /<span class="badge badge-panne" data-i18n="badgePanne">Non vérifiée<\/span>/);
+  assert.match(html, /<span class="badge badge-panne">Non vérifiée<\/span>/);
+  assert.match(/<p class="bandeau-panne" role="status">([^<]*)<\/p>/.exec(en)?.[1], /^Some catalog apps are unreachable/);
+  assert.match(en, /<span class="badge badge-panne">Unverified<\/span>/);
 });
 
 /** Le <picture> d'une carte, repéré par l'identifiant de son app. */

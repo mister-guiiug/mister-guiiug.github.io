@@ -145,7 +145,9 @@ html {
   gap: 0.5rem;
   justify-content: flex-end;
 }
-.prefs fieldset {
+/* La langue est un lien (une page par langue), le thème un bouton : même allure. */
+.prefs fieldset,
+.prefs .langues {
   display: inline-flex;
   gap: 0.15rem;
   margin: 0;
@@ -161,7 +163,8 @@ html {
   overflow: hidden;
   clip: rect(0 0 0 0);
 }
-.prefs button {
+.prefs button,
+.prefs .langues a {
   appearance: none;
   border: 0;
   border-radius: 999px;
@@ -191,16 +194,21 @@ html {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.prefs button .drapeau {
+.prefs .langues a {
+  text-decoration: none;
+}
+.prefs .drapeau {
   font-size: 1.15rem;
   line-height: 1;
 }
-.prefs button[aria-pressed='true'] {
+.prefs button[aria-pressed='true'],
+.prefs .langues a[aria-current='page'] {
   background: var(--fond-carte);
   color: var(--texte);
   box-shadow: 0 0 0 1px var(--bord);
 }
 .prefs button:focus-visible,
+.prefs .langues a:focus-visible,
 .chip:focus-visible,
 .installer:focus-visible,
 .vide-effacer:focus-visible {
@@ -238,6 +246,14 @@ html {
   font-size: 1rem;
   font-weight: 600;
   line-height: 1.3;
+}
+/* Hors de l'accueil, l'identité y ramène. */
+.titre a {
+  color: inherit;
+  text-decoration: none;
+}
+.titre a:hover {
+  text-decoration: underline;
 }
 .chapeau {
   color: var(--doux);
@@ -835,6 +851,17 @@ main > section[data-cat-section] {
   stroke-linejoin: round;
 }
 .guides {
+  margin-top: 2rem;
+}
+/* L'index des guides a sa page : son titre en est le h1. */
+.guides h1 {
+  margin: 0 0 0.6rem;
+  font-size: clamp(1.35rem, 2.6vw, 1.65rem);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+/* Sur l'accueil, un renvoi vers cette page. */
+.guides-renvoi {
   margin-top: 3rem;
 }
 .guides-intro {
@@ -855,7 +882,7 @@ main > section[data-cat-section] {
   border-radius: 1rem;
   background: var(--fond-carte);
 }
-.guides-groupe h3 {
+.guides-groupe h2 {
   margin: 0 0 0.65rem;
   color: var(--doux);
   font-size: 0.78rem;
@@ -1117,6 +1144,7 @@ footer p:last-child {
   .sommaire a,
   .sponsor,
   .prefs fieldset,
+  .prefs .langues,
   .filtre input,
   .filtre-kbd span,
   .maturite,
@@ -1127,13 +1155,15 @@ footer p:last-child {
   .carte-hit:focus-visible,
   a:focus-visible,
   .prefs button:focus-visible,
+  .prefs .langues a:focus-visible,
   .chip:focus-visible,
   .filtre input:focus-visible {
     outline: 3px solid Highlight;
   }
   .sommaire a[aria-current='true'],
   .chip[aria-pressed='true'],
-  .prefs button[aria-pressed='true'] {
+  .prefs button[aria-pressed='true'],
+  .prefs .langues a[aria-current='page'] {
     background: Highlight;
     color: HighlightText;
     forced-color-adjust: none;

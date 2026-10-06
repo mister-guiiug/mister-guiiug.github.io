@@ -20,6 +20,7 @@ import { entreeGuide, lienGuideDeCarte, regrouperGuides } from './guides.mjs';
 import { poserPalettes } from './palette.mjs';
 import { JETONS, entiteEditeur, entiteSite, jsonLdTexte } from './pages-hub.mjs';
 import { MOTIF_ROBOT } from './seo-hub.mjs';
+import { traduire } from './traduire.mjs';
 
 /** La feuille de style, palettes posées (voir palette.mjs). */
 const CSS = poserPalettes(readFileSync(new URL('./accueil/hub.css', import.meta.url), 'utf8'));
@@ -36,6 +37,28 @@ const indente = (texte, n) =>
 /** Pose une valeur à la place d'un jeton, sans interpréter ses `$`. */
 const pose = (texte, jeton, valeur) => texte.split(jeton).join(valeur);
 
+/**
+ * LES PAGES RENDUES ICI, DANS CHAQUE LANGUE. Le français reste à la racine,
+ * adresse publiée depuis toujours ; l'anglais vit sous `/en/`.
+ */
+export const ADRESSES = {
+  accueil: { fr: '/', en: '/en/' },
+  guides: { fr: '/guides.html', en: '/en/guides.html' },
+};
+export const LANGUES = ['fr', 'en'];
+
+/** Le fichier écrit pour une adresse : `/` → `index.html`, `/en/` → `en/index.html`. */
+export const fichierDe = chemin => (chemin.endsWith('/') ? `${chemin}index.html` : chemin).slice(1);
+
+/**
+ * Un lien vers une page du hub, apparié : la traduction pose l'adresse de la
+ * langue de la page (voir traduire.mjs).
+ */
+const lienDePage = (ctx, page, texte, attrs = '') => {
+  const { fr, en } = ADRESSES[page];
+  return `<a href="${ctx.origine}${fr}" data-fr-href="${ctx.origine}${fr}" data-en-href="${ctx.origine}${en}"${attrs}>${texte}</a>`;
+};
+
 // ---------------------------------------------------------------------------
 // Données structurées — le site, son éditeur, et la liste de ses applications
 // ---------------------------------------------------------------------------
@@ -51,21 +74,22 @@ const pose = (texte, jeton, valeur) => texte.split(jeton).join(valeur);
  *
  * `<` est échappé : une description contenant `</script>` fermerait le bloc.
  */
-const donneesStructurees = ({ origine, compte, apps, pageDeBureau, surOrigine }) => ({
+const donneesStructurees = ({ origine, compte, apps, pageDeBureau, surOrigine }, langue = 'fr') => ({
   '@context': 'https://schema.org',
   '@graph': [
     {
       ...entiteSite({ origine, compte }),
       potentialAction: {
         '@type': 'ViewAction',
-        target: `${origine}/`,
-        name: `Les applications de ${compte}`,
+        target: `${origine}${ADRESSES.accueil[langue]}`,
+        name: langue === 'en' ? `Apps by ${compte}` : `Les applications de ${compte}`,
       },
     },
     entiteEditeur({ origine, compte }),
     {
       '@type': 'ItemList',
-      name: `Applications de ${compte}`,
+      name: langue === 'en' ? `Apps by ${compte}` : `Applications de ${compte}`,
+      inLanguage: langue,
       // Les apps servies sur l'origine, et les apps de bureau par leur page du
       // hub : l'adresse d'un dépôt GitHub n'est pas une page du parc.
       itemListElement: apps
@@ -385,24 +409,50 @@ const groupesDeGuides = ctx =>
     },
   ].filter(g => g.entrees.length);
 
-const guidesSection = (groupesGuides, nbGuides) =>
-  nbGuides
-    ? `
+/**
+ * L'INDEX DES GUIDES, SUR SA PAGE (`/guides.html`, `/en/guides.html`). Il
+ * occupait 2 201 px d'un accueil de 6 900 (mesuré le 05/10/2026) ; l'accueil
+ * garde le lien « Guide » de chaque carte et un renvoi vers cette page.
+ *
+ * Les guides de la langue de la page passent en tête de leur groupe : c'était
+ * le script qui les réordonnait au clic, c'est désormais la construction.
+ */
+const guidesSection = (groupesGuides, nbGuides, langue) => {
+  if (!nbGuides) return '';
+  const rang = e => (e.guide[langue] ? 0 : 1);
+  return `
       <section class="guides" aria-labelledby="guides">
-        <h2 id="guides" data-i18n="guides">Guides pratiques</h2>
+        <h1 id="guides" data-i18n="guides">Guides pratiques</h1>
         <p class="guides-intro" data-i18n="guidesIntro">Les pages de contenu des applications : méthodes pas à pas, règles et questions fréquentes.</p>
         <div class="guides-grille">
 ${groupesGuides
   .map(
     g => `          <section class="guides-groupe" aria-labelledby="guides-${g.cle}">
-            <h3 id="guides-${g.cle}" ${g.attribut}>${echappe(g.libelle)}</h3>
+            <h2 id="guides-${g.cle}" ${g.attribut}>${echappe(g.libelle)}</h2>
             <ul class="guides-liste">
-${g.entrees.map((e, ordre) => entreeGuide(e.guide, { nom: e.nom, site: e.site, ordre })).join('\n')}
+${g.entrees
+  .map((e, ordre) => ({ e, ordre }))
+  .sort((a, b) => rang(a.e) - rang(b.e) || a.ordre - b.ordre)
+  .map(({ e, ordre }) => entreeGuide(e.guide, { nom: e.nom, site: e.site, ordre }))
+  .join('\n')}
             </ul>
           </section>`
   )
   .join('\n')}
         </div>
+      </section>`;
+};
+
+/** Le renvoi de l'accueil vers l'index des guides. `#guides` y mène toujours. */
+const renvoiGuides = (ctx, nbGuides) =>
+  nbGuides
+    ? `
+      <section class="guides-renvoi" aria-labelledby="guides">
+        <h2 id="guides" data-i18n="guides">Guides pratiques</h2>
+        <p class="guides-intro" data-i18n="guidesRenvoi">Les pages de contenu des applications.</p>
+        <p class="actions">
+          ${lienDePage(ctx, 'guides', 'Voir tous les guides', ' class="action action-guides" data-i18n="guidesTous"')}
+        </p>
       </section>`
     : '';
 
@@ -455,13 +505,22 @@ const libellesClient = ctx => {
     nbCats,
     plusieursLangues,
     languesGuides,
+    nbGuides,
     libellesFr,
     libellesEn,
   } = ctx;
+  /** Tant que tous les guides sont en français, l'anglais le dit. */
+  const enFrancais = plusieursLangues || !languesGuides.has('fr') ? '' : ', in French';
   return {
     fr: {
       title: titrePage,
       description,
+      titreGuides: `Guides pratiques des applications de ${compte}`,
+      descriptionGuides: `${nbGuides} guides des applications de ${compte} : méthodes pas à pas, règles et questions fréquentes, par catégorie.`,
+      imageAlt: `Les applications de ${compte} : leurs icônes, en mosaïque`,
+      skipGuides: 'Aller aux guides',
+      guidesTous: 'Voir tous les guides',
+      guidesRenvoi: `${nbGuides} pages de contenu des applications : méthodes pas à pas, règles et questions fréquentes.`,
       marque: 'GuiiuG',
       titre: `Les applications de ${compte}`,
       chapeau:
@@ -536,6 +595,12 @@ const libellesClient = ctx => {
     en: {
       title: titrePageEn,
       description: descriptionEn,
+      titreGuides: `Practical guides for ${compte}'s apps: methods and FAQs`,
+      descriptionGuides: `${nbGuides} guides for ${compte}'s apps: step-by-step methods, rules and FAQs${enFrancais}, by category.`,
+      imageAlt: `${compte}'s apps: their icons, as a mosaic`,
+      skipGuides: 'Skip to guides',
+      guidesTous: 'See all guides',
+      guidesRenvoi: `${nbGuides} content pages from the apps: step-by-step methods, rules and FAQs${enFrancais}.`,
       marque: 'GuiiuG',
       titre: `Apps by ${compte}`,
       chapeau:
@@ -591,10 +656,7 @@ const libellesClient = ctx => {
       guideFr: 'Guide (FR)',
       guideEn: 'Guide',
       guides: 'Practical guides',
-      // Tant que tous les guides sont en français, la phrase le dit.
-      guidesIntro: plusieursLangues || !languesGuides.has('fr')
-        ? 'Content pages from the apps: step-by-step methods, rules and FAQs.'
-        : 'Content pages from the apps: step-by-step methods, rules and FAQs, in French.',
+      guidesIntro: `Content pages from the apps: step-by-step methods, rules and FAQs${enFrancais}.`,
       aPropos: 'About (FR)',
       presentation: 'Overview (FR)',
       skip: 'Skip to apps',
@@ -613,7 +675,7 @@ const libellesClient = ctx => {
 };
 
 /**
- * L'accueil, rendu.
+ * L'accueil et l'index des guides, rendus dans chaque langue.
  *
  * @param {object} donnees
  * @param {string} donnees.origine        l'origine de la famille (`FAMILY_ORIGIN`)
@@ -637,7 +699,11 @@ const libellesClient = ctx => {
  * @param {Map<string, object[]>} donnees.pagesParSite  nom → pages de contenu
  * @param {boolean} [donnees.raccourci]  le socle publie `command.js` : la page
  *   charge le raccourci Ctrl+K et l'annonce ; sinon ni module, ni indication
- * @returns {{ html: string, description: string, featuredId: string|null, nbSections: number, nbGuides: number }}
+ * @returns {{
+ *   html: string,
+ *   pages: { page: 'accueil'|'guides', langue: 'fr'|'en', chemin: string, fichier: string, texte: string }[],
+ *   description: string, descriptionEn: string, featuredId: string|null, nbSections: number, nbGuides: number
+ * }} `html` est l'accueil français ; `pages`, les quatre pages, à écrire
  */
 export function rendreAccueil(donnees) {
   const { origine, compte, apps, categories, apercus } = donnees;
@@ -652,8 +718,6 @@ export function rendreAccueil(donnees) {
   const featuredId = featuredApp?.id ?? null;
 
   const ctx = { ...donnees, surOrigine, catsAvecApps, featuredId };
-
-  const jsonLd = jsonLdTexte(donneesStructurees(ctx));
 
   const navCats = catsAvecApps
     .map(
@@ -685,7 +749,6 @@ export function rendreAccueil(donnees) {
   );
   /** Plusieurs langues : l'introduction anglaise ne dit plus « in French ». */
   const plusieursLangues = languesGuides.size > 1;
-  const guidesHtml = guidesSection(groupesGuides, nbGuides);
 
   const description = descriptionFr(compte, apps);
   const descriptionEn = descriptionAnglaise(compte, apps);
@@ -707,83 +770,134 @@ export function rendreAccueil(donnees) {
     descriptionEn,
     nbApps,
     nbCats,
+    nbGuides,
     plusieursLangues,
     languesGuides,
   });
-  const i18nJson = JSON.stringify(libelles).replace(/</g, '\\u003c');
 
-  const script = indente(
-    [
-      ['__HUB_ORIGINE__', origine],
-      ['__HUB_I18N__', i18nJson],
-      ['__HUB_HASARD__', hasardJson],
-      ['__HUB_ROBOT__', MOTIF_ROBOT.toString()],
-    ].reduce((texte, [jeton, valeur]) => pose(texte, jeton, valeur), SCRIPT),
-    6
-  );
+  // Le ciel du fond est servi par l'origine (voir palette.mjs, ciel.mjs).
+  const css = indente(pose(CSS, '__HUB_ORIGINE__', origine), 6);
 
-  const html = pageHtml({
-    ...ctx,
-    titrePage,
+  /** Le script de la page : SES libellés seulement, dans SA langue. */
+  const scriptDe = t =>
+    indente(
+      [
+        ['__HUB_ORIGINE__', origine],
+        ['__HUB_I18N__', JSON.stringify(t).replace(/</g, '\\u003c')],
+        ['__HUB_HASARD__', hasardJson],
+        ['__HUB_ROBOT__', MOTIF_ROBOT.toString()],
+      ].reduce((texte, [jeton, valeur]) => pose(texte, jeton, valeur), SCRIPT),
+      6
+    );
+
+  const pages = [];
+  for (const langue of LANGUES) {
+    const t = libelles[langue];
+    const commun = { ...ctx, langue, t, nbApps, nbCats, nbGuides, css };
+
+    const accueil = pageHtml({
+      ...commun,
+      page: 'accueil',
+      titre: t.title,
+      descriptionPage: t.description,
+      jsonLd: jsonLdTexte(donneesStructurees(ctx, langue)),
+      navCats,
+      featuredHtml,
+      videSuggestions,
+      sections,
+      guidesHtml: renvoiGuides(ctx, nbGuides),
+      bandeauPanne: libelles.fr.bandeauPanne,
+      script: scriptDe(t),
+    });
+    pages.push({ page: 'accueil', langue, chemin: ADRESSES.accueil[langue], texte: traduire(accueil, t, langue) });
+
+    if (nbGuides) {
+      const tGuides = { ...t, title: t.titreGuides, description: t.descriptionGuides };
+      const guides = pageGuidesHtml({
+        ...commun,
+        page: 'guides',
+        titre: t.titreGuides,
+        descriptionPage: t.descriptionGuides,
+        jsonLd: jsonLdTexte(donneesGuides(ctx, langue, groupesGuides, t)),
+        guidesHtml: guidesSection(groupesGuides, nbGuides, langue),
+        script: scriptDe(tGuides),
+      });
+      pages.push({ page: 'guides', langue, chemin: ADRESSES.guides[langue], texte: traduire(guides, tGuides, langue) });
+    }
+  }
+  for (const p of pages) p.fichier = fichierDe(p.chemin);
+
+  return {
+    html: pages[0].texte,
+    pages,
     description,
-    jsonLd,
-    navCats,
-    nbApps,
-    nbCats,
-    confianceFr,
-    featuredHtml,
-    videSuggestions,
-    sections,
-    guidesHtml,
+    descriptionEn,
+    featuredId,
+    nbSections: sections.length,
     nbGuides,
-    majFr,
-    bandeauPanne: libelles.fr.bandeauPanne,
-    css: indente(CSS, 6),
-    script,
-  });
-
-  return { html, description, featuredId, nbSections: sections.length, nbGuides };
+  };
 }
 
-function pageHtml(ctx) {
-  const {
-    origine,
-    compte,
-    soi,
-    theme,
-    sponsorUrl,
-    imageEmpreinte,
-    enPanne,
-    coulisses,
-    titrePage,
-    description,
-    jsonLd,
-    navCats,
-    nbApps,
-    nbCats,
-    confianceFr,
-    featuredHtml,
-    videSuggestions,
-    sections,
-    guidesHtml,
-    nbGuides,
-    majFr,
-    bandeauPanne,
-    css,
-    script,
-    raccourci,
-  } = ctx;
+/**
+ * L'index des guides, en données structurées : une `CollectionPage` du site,
+ * qui liste ses guides dans la langue de la page quand ils y existent.
+ */
+const donneesGuides = (ctx, langue, groupes, t) => {
+  const { origine, compte } = ctx;
+  const url = `${origine}${ADRESSES.guides[langue]}`;
+  const guides = groupes.flatMap(g => g.entrees.map(e => e.guide[langue] ?? Object.values(e.guide)[0]));
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CollectionPage',
+        '@id': `${url}#page`,
+        url,
+        name: t.titreGuides,
+        description: t.descriptionGuides,
+        inLanguage: langue,
+        isPartOf: { '@id': `${origine}/#site` },
+        publisher: { '@id': `${origine}/#org` },
+        mainEntity: {
+          '@type': 'ItemList',
+          numberOfItems: guides.length,
+          itemListElement: guides.map((g, i) => ({
+            '@type': 'ListItem',
+            position: i + 1,
+            url: g.url,
+            name: g.titre,
+          })),
+        },
+      },
+      entiteEditeur({ origine, compte }),
+    ],
+  };
+};
+
+/**
+ * La tête de chaque page : sa langue, son adresse canonique, sa traduction
+ * (`hreflang`, réciproques : chaque page nomme les deux), son manifeste.
+ */
+function teteHtml(ctx) {
+  const { origine, theme, imageEmpreinte, langue, page, titre, descriptionPage, jsonLd, css, t } = ctx;
+  const adresses = ADRESSES[page];
+  const url = `${origine}${adresses[langue]}`;
+  const image = `${origine}/og-image.jpg?v=${imageEmpreinte}`;
+  const manifeste = `${origine}${langue === 'en' ? '/en' : ''}/manifest.webmanifest`;
   return `<!doctype html>
-<html lang="fr" data-theme="system">
+<html lang="${langue}" data-theme="system">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta http-equiv="Content-Security-Policy" content="${JETON_CSP}" />
-    <title>${titrePage}</title>
-    <meta name="description" content="${echappe(description)}" />
+    <title>${echappe(titre)}</title>
+    <meta name="description" content="${echappe(descriptionPage)}" />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="${origine}/" />
-    <link rel="manifest" href="${origine}/manifest.webmanifest" />
+    <link rel="canonical" href="${url}" />
+    <link rel="alternate" hreflang="fr" href="${origine}${adresses.fr}" />
+    <link rel="alternate" hreflang="en" href="${origine}${adresses.en}" />
+    <link rel="alternate" hreflang="x-default" href="${origine}${adresses.fr}" />
+    <link rel="manifest" href="${manifeste}" />
     <meta name="theme-color" content="${theme}" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0f1220" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="${theme}" id="theme-color" />
@@ -794,30 +908,29 @@ function pageHtml(ctx) {
     <link rel="icon" href="${origine}/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="${origine}/favicon.ico" sizes="any" />
     <meta property="og:type" content="website" />
-
-    <meta property="og:title" content="${titrePage}" />
-    <meta property="og:description" content="${echappe(description)}" />
-    <meta property="og:url" content="${origine}/" />
-    <meta property="og:image" content="${origine}/og-image.jpg?v=${imageEmpreinte}" />
+    <meta property="og:locale" content="${langue === 'en' ? 'en_GB' : 'fr_FR'}" />
+    <meta property="og:locale:alternate" content="${langue === 'en' ? 'fr_FR' : 'en_GB'}" />
+    <meta property="og:title" content="${echappe(titre)}" />
+    <meta property="og:description" content="${echappe(descriptionPage)}" />
+    <meta property="og:url" content="${url}" />
+    <meta property="og:image" content="${image}" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Les applications de ${compte} : leurs icônes, en mosaïque" />
+    <meta property="og:image:alt" content="${echappe(t.imageAlt)}" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${titrePage}" />
-    <meta name="twitter:description" content="${echappe(description)}" />
-    <meta name="twitter:image" content="${origine}/og-image.jpg?v=${imageEmpreinte}" />
+    <meta name="twitter:title" content="${echappe(titre)}" />
+    <meta name="twitter:description" content="${echappe(descriptionPage)}" />
+    <meta name="twitter:image" content="${image}" />
     <script type="application/ld+json">${jsonLd}</script>
     <script>
       (function () {
         // Le fondu des miniatures n'existe qu'avec le script : sans lui, elles
-        // s'affichent d'emblée (voir .visuel-img dans hub.css).
+        // s'affichent d'emblée (voir .visuel-img dans hub.css). La LANGUE n'est
+        // plus une préférence : c'est l'adresse de la page.
         document.documentElement.classList.add('js');
         try {
-          var t = localStorage.getItem('hub-theme') || 'system';
-          var l = localStorage.getItem('hub-lang') || 'fr';
-          document.documentElement.dataset.theme = t;
-          document.documentElement.lang = l === 'en' ? 'en' : 'fr';
+          document.documentElement.dataset.theme = localStorage.getItem('hub-theme') || 'system';
         } catch (e) {}
         var mac = /Mac|iPhone|iPad/.test(navigator.platform || '') || /Mac/.test(navigator.userAgent || '');
         document.documentElement.dataset.mod = mac ? 'meta' : 'ctrl';
@@ -829,9 +942,29 @@ function pageHtml(ctx) {
     <style>
 ${css}
     </style>
-  </head>
-  <body>
-    <a class="skip" href="#catalogue" data-i18n="skip">Aller aux applications</a>
+  </head>`;
+}
+
+/**
+ * L'en-tête : l'identité, les préférences, les pages du parc. La langue se
+ * choisit par deux LIENS vers la même page dans chaque langue : un robot les
+ * suit, et le script n'a plus rien à réécrire.
+ */
+function enteteHtml(ctx) {
+  const { origine, compte, page, langue, featuredHtml } = ctx;
+  const adresses = ADRESSES[page];
+  const lienLangue = (l, nom, drapeau) =>
+    `<a href="${origine}${adresses[l]}" hreflang="${l}" lang="${l}" aria-label="${nom}" title="${nom}"${l === langue ? ' aria-current="page"' : ''} data-lien-langue>
+              <span class="drapeau" aria-hidden="true">${drapeau}</span>
+            </a>`;
+  const accueil = page === 'accueil';
+  // Sur l'accueil, le h1 dit ce qu'est la page ; ailleurs, il est le titre de
+  // la page, et l'identité ramène à l'accueil.
+  const titre = accueil
+    ? `<h1 class="titre" data-i18n="titre">Les applications de ${compte}</h1>`
+    : `<p class="titre">${lienDePage(ctx, 'accueil', `Les applications de ${compte}`, ' data-i18n="titre"')}</p>`;
+  return `
+    <a class="skip" href="${accueil ? '#catalogue' : '#guides'}" data-i18n="${accueil ? 'skip' : 'skipGuides'}">${accueil ? 'Aller aux applications' : 'Aller aux guides'}</a>
 
     <header class="entete">
       <div class="topbar">
@@ -846,19 +979,14 @@ ${css}
           />
           <div class="identite-texte">
             <p class="marque" data-i18n="marque">GuiiuG</p>
-            <h1 class="titre" data-i18n="titre">Les applications de ${compte}</h1>
+            ${titre}
           </div>
         </div>
         <div class="prefs">
-          <fieldset>
-            <legend data-i18n="langue">Langue</legend>
-            <button type="button" data-set-lang="fr" data-i18n-aria="langFr" aria-label="Français" aria-pressed="true" title="Français">
-              <span class="drapeau" aria-hidden="true">🇫🇷</span>
-            </button>
-            <button type="button" data-set-lang="en" data-i18n-aria="langEn" aria-label="English" aria-pressed="false" title="English">
-              <span class="drapeau" aria-hidden="true">🇬🇧</span>
-            </button>
-          </fieldset>
+          <nav class="langues" data-i18n-aria="langue" aria-label="Langue">
+            ${lienLangue('fr', 'Français', '🇫🇷')}
+            ${lienLangue('en', 'English', '🇬🇧')}
+          </nav>
           <fieldset>
             <legend data-i18n="themeLegende">Thème</legend>
             <button type="button" data-set-theme="light" data-i18n-aria="themeLight" aria-label="Clair" aria-pressed="false" title="Clair">
@@ -882,13 +1010,15 @@ ${css}
 
       <nav class="sites" aria-labelledby="sites-label">
         <span id="sites-label" class="sr-only" data-i18n="sites">Pages du parc</span>
-        <a href="${origine}/" aria-current="page" data-i18n="siteCatalogue">Catalogue</a>
+        ${lienDePage(ctx, 'accueil', 'Catalogue', `${accueil ? ' aria-current="page"' : ''} data-i18n="siteCatalogue"`)}
         <a href="${origine}/dev-pwa-config/" data-i18n="siteShowroom">Showroom</a>
         <a href="${origine}/parc-dashboard/" data-i18n="siteParc">Parc</a>
-      </nav>
+      </nav>${
+        accueil
+          ? `
 
       <div class="hero-texte">
-        <p class="chapeau" id="chapeau" data-i18n="chapeau" data-i18n-pwa="chapeauPwa">
+        <p class="chapeau" id="chapeau" data-i18n="chapeau">
           Des applications web à installer depuis le navigateur. Pas de magasin, et la plupart restent utilisables hors ligne.
         </p>
         <button type="button" class="chapeau-plus" id="chapeau-plus" data-i18n="enSavoirPlus" aria-expanded="false" aria-controls="chapeau">En savoir plus</button>
@@ -900,8 +1030,94 @@ ${css}
           <button type="button" class="installer" id="installer" data-i18n="installer" hidden>Installer le catalogue</button>
         </p>
       </div>
-${featuredHtml}
-    </header>
+${featuredHtml}`
+          : ''
+      }
+    </header>`;
+}
+
+/** Le pied de page, et le bouton de retour en haut. */
+function piedHtml(ctx) {
+  const { origine, compte, soi, sponsorUrl, page, nbGuides } = ctx;
+  const accueil = page === 'accueil';
+  return `
+    <footer>
+      <p>
+        <a href="${origine}/a-propos.html" data-i18n="aPropos">À propos</a>${
+          accueil && nbGuides
+            ? `
+        ·
+        ${lienDePage(ctx, 'guides', 'Guides pratiques', ' data-i18n="guides"')}`
+            : ''
+        }${
+          accueil
+            ? ''
+            : `
+        ·
+        ${lienDePage(ctx, 'accueil', 'Catalogue', ' data-i18n="siteCatalogue"')}`
+        }
+      </p>
+      <p>
+        <span data-i18n="source">Code source sur</span>
+        <a href="https://github.com/${compte}">github.com/${compte}</a>.
+      </p>
+      <p>
+        <span data-i18n="sponsorBefore">Ces applications sont gratuites et open source.</span>
+        <a class="sponsor" href="${sponsorUrl}" rel="noopener noreferrer">
+          <span class="ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 8h12v8a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V8z"/><path d="M16 9h2.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 5c0 1.5 1.2 2 2 3 .8-1 2-1.5 2-3a2 2 0 1 0-4 0z"/></svg>
+          </span>
+          <span data-i18n="sponsorLink">M'offrir un café</span>
+        </a>
+      </p>
+      <p>
+        <span data-i18n="maj">${majFr}</span>
+        ·
+        <a href="https://github.com/${compte}/${soi}/blob/main/LICENSE" data-i18n="licence">Licence MIT</a>
+      </p>
+    </footer>
+    <a class="haut" id="haut" href="${accueil ? '#catalogue' : '#guides'}" data-i18n-aria="haut" aria-label="Retour en haut">
+      <span class="ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+      </span>
+    </a>`;
+}
+
+/** L'index des guides : l'en-tête et le pied de l'accueil, les guides entre les deux. */
+function pageGuidesHtml(ctx) {
+  const { guidesHtml, script } = ctx;
+  return `${teteHtml(ctx)}
+  <body>${enteteHtml(ctx)}
+
+    <main id="index-guides">
+${guidesHtml}
+    </main>
+${piedHtml(ctx)}
+<script>
+${script}
+    </script>
+  </body>
+</html>
+`;
+}
+
+function pageHtml(ctx) {
+  const {
+    origine,
+    enPanne,
+    coulisses,
+    navCats,
+    nbApps,
+    nbCats,
+    videSuggestions,
+    sections,
+    guidesHtml,
+    bandeauPanne,
+    script,
+    raccourci,
+  } = ctx;
+  return `${teteHtml(ctx)}
+  <body>${enteteHtml(ctx)}
 
     <search class="collant" id="collant" data-i18n-aria="recherche" aria-label="Recherche et filtres">
       <div class="collant-ligne">
@@ -997,45 +1213,11 @@ ${coulisses.map(s => carteCoulisse(ctx, s)).join('\n')}
     : ''
 }
     </main>
-
-    <footer>
-      <p>
-        <a href="${origine}/a-propos.html" data-i18n="aPropos">À propos</a>${
-          nbGuides
-            ? `
-        ·
-        <a href="#guides" data-i18n="guides">Guides pratiques</a>`
-            : ''
-        }
-      </p>
-      <p>
-        <span data-i18n="source">Code source sur</span>
-        <a href="https://github.com/${compte}">github.com/${compte}</a>.
-      </p>
-      <p>
-        <span data-i18n="sponsorBefore">Ces applications sont gratuites et open source.</span>
-        <a class="sponsor" href="${sponsorUrl}" rel="noopener noreferrer">
-          <span class="ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M4 8h12v8a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V8z"/><path d="M16 9h2.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 5c0 1.5 1.2 2 2 3 .8-1 2-1.5 2-3a2 2 0 1 0-4 0z"/></svg>
-          </span>
-          <span data-i18n="sponsorLink">M'offrir un café</span>
-        </a>
-      </p>
-      <p>
-        <span data-i18n="maj">${majFr}</span>
-        ·
-        <a href="https://github.com/${compte}/${soi}/blob/main/LICENSE" data-i18n="licence">Licence MIT</a>
-      </p>
-    </footer>
-    <a class="haut" id="haut" href="#catalogue" data-i18n-aria="haut" aria-label="Retour en haut">
-      <span class="ico" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-      </span>
-    </a>
+${piedHtml(ctx)}
 <script>
 ${script}
     </script>${raccourci ? `
-    <script type="module" src="./hub-command.js"></script>` : ''}
+    <script type="module" src="${origine}/hub-command.js"></script>` : ''}
   </body>
 </html>
 `;

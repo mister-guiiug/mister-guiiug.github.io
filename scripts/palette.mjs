@@ -44,13 +44,14 @@ export const CLAIR = {
   // « Non vérifiée » : une teinte, et le texte qui la lit au-dessus de 4,5:1.
   panne: '#b45309',
   'panne-fg': '#9a3412',
-  // Lilas, ciel et pêche : une aube. L'URL est RELATIVE, pour que l'aperçu
-  // local, servi sous un chemin, trouve son fichier.
+  // Lilas, ciel et pêche : une aube. L'adresse part de l'origine, posée au
+  // rendu comme celle des icônes : relative, elle visait /en/ciel-….svg depuis
+  // la page anglaise. L'aperçu local la réécrit (apercu.mjs).
   motif: [
     nuage(FORMES[0], 'rgb(167 139 250 / 0.24)'),
     nuage(FORMES[1], 'rgb(56 189 248 / 0.18)'),
     nuage(FORMES[2], 'rgb(251 146 60 / 0.1)'),
-    `url("${FICHIERS_DU_CIEL.clair}")`,
+    `url("__HUB_ORIGINE__/${FICHIERS_DU_CIEL.clair}")`,
   ],
   'motif-taille': `100% 1600px, 100% 1600px, 100% 1600px, ${TUILE.largeur}px ${TUILE.hauteur}px`,
   'motif-repete': 'no-repeat, no-repeat, no-repeat, repeat',
@@ -79,7 +80,7 @@ export const SOMBRE = {
     nuage(FORMES[0], 'rgb(124 58 237 / 0.26)'),
     nuage(FORMES[1], 'rgb(14 165 233 / 0.17)'),
     nuage(FORMES[2], 'rgb(236 72 153 / 0.1)'),
-    `url("${FICHIERS_DU_CIEL.sombre}")`,
+    `url("__HUB_ORIGINE__/${FICHIERS_DU_CIEL.sombre}")`,
   ],
 };
 

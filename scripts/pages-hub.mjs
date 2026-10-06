@@ -70,7 +70,8 @@ export function entiteSite({ origine, compte }) {
     '@id': `${origine}/#site`,
     name: `Les applications de ${compte}`,
     url: `${origine}/`,
-    inLanguage: 'fr',
+    // L'accueil et l'index des guides existent aussi sous /en/ (accueil.mjs).
+    inLanguage: ['fr', 'en'],
     publisher: { '@id': `${origine}/#org` },
   };
 }

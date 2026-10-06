@@ -116,7 +116,8 @@ const accueil = raccourci =>
 
 test('avec command.js, la page charge le module et annonce le raccourci', () => {
   const html = accueil(true);
-  assert.match(html, /<script type="module" src="\.\/hub-command\.js"><\/script>/);
+  // Depuis l'origine : relatif, il visait /en/hub-command.js depuis la page anglaise.
+  assert.match(html, /<script type="module" src="https:\/\/exemple\.github\.io\/hub-command\.js"><\/script>/);
   assert.match(html, /aria-keyshortcuts="Control\+K Meta\+K"/);
   assert.match(html, /<kbd class="filtre-kbd"/);
   assert.match(html, /<label class="filtre filtre-raccourci">/);

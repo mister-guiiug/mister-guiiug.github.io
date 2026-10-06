@@ -52,9 +52,11 @@ L'API GitHub ne sert plus qu'à trouver la dernière version publiée du socle, 
 Chaque carte d'application porte aussi un lien « Guide » vers sa première
 **page de contenu** en français (socle 6.17.0 : `content/pages/<slug>.md` →
 `<slug>.html`), lue dans le plan de site de l'app, avec son titre en infobulle.
-La section **« Guides pratiques »** les liste TOUTES, françaises et anglaises,
-avec leur titre (`<h1>`) pour ancre, groupées par catégorie ; celle du
-squelette y figure aussi. Chaque carte affiche une miniature de l'**image de
+**L'index des guides a sa page**, `/guides.html` (`/en/guides.html` en anglais) :
+il les liste TOUS, français et anglais, avec leur titre (`<h1>`) pour ancre,
+groupés par catégorie ; celui du squelette y figure aussi. Il occupait 2 201 px
+d'un accueil de 6 900 : l'accueil garde le lien « Guide » de chaque carte et un
+renvoi vers l'index (`#guides` y mène toujours). Chaque carte affiche une miniature de l'**image de
 partage** de l'app (`og-image.jpg`, 1200×630), sondée à la construction puis
 réduite à 640 px en JPEG et en WebP dans `previews/`, avec un `alt` qui la
 décrit. Les miniatures sont écrites avant le rendu, qui ne propose que ce qui
@@ -97,11 +99,32 @@ lancement de l'app installée, est rangée sous la même clé.
 Le `<title>` reste le titre long : le titre court « GuiiuG » ne s'affiche que
 dans la fenêtre de l'app installée, et jamais pour un robot.
 
-La page propose un bascule **FR / EN** (catégories et maturités du socle,
-descriptions EN locales au hub, `scripts/descriptions-en.mjs`) et un thème
-**clair / sombre / système**, mémorisés dans `localStorage`. Une app née au
-catalogue sans description anglaise garde la française, marquée `lang="fr"`,
-et la construction la nomme dans un `::warning::`. Les palettes vivent dans
+**L'anglais est rendu à la construction, sous `/en/`.** L'accueil et l'index des
+guides existent dans chaque langue, à leur adresse : `/` et `/en/`,
+`/guides.html` et `/en/guides.html`. Chaque page nomme sa traduction par des
+`hreflang` réciproques (`x-default` : le français, l'adresse publiée depuis
+toujours), et a sa canonique. Jusqu'au 06/10/2026, le HTML servi était
+français et le script le réécrivait en anglais au clic : `/en/` répondait 404,
+et un robot ou un aperçu de lien ne voyait jamais l'anglais.
+
+- **Les gabarits gardent leur forme** : un texte français marqué par la clé du
+  dictionnaire qui le traduit (`data-i18n`, `data-fr`/`data-en`…).
+  `scripts/traduire.mjs` fait, une fois par page et par langue, ce que faisait
+  le script, puis retire les marqueurs. Un élément marqué qui contiendrait
+  autre chose que du texte fait échouer la construction.
+- **La langue se choisit par deux liens**, vers la même page dans l'autre
+  langue ; la recherche en cours suit le lien.
+- **Le script ne garde que la préférence d'affichage** : le thème
+  (**clair / sombre / système**, dans `localStorage`), les filtres et le
+  chapeau déplié. Il n'embarque que les libellés de SA page.
+- **L'anglais a son manifeste**, `/en/manifest.webmanifest` : une autre
+  application installable, de portée `/en/`, qui ne couvre elle non plus
+  aucune app.
+
+Les catégories et maturités viennent du socle ; les descriptions anglaises,
+de `scripts/descriptions-en.mjs`. Une app née au catalogue sans description
+anglaise garde la française, marquée `lang="fr"`, et la construction la nomme
+dans un `::warning::`. Les palettes vivent dans
 `scripts/palette.mjs`, écrites une fois.
 
 **Le fond est un ciel.** En haut de la page, trois nuages de nébuleuse en dégradés : une aube pastel en clair, violet, bleu et rose en sombre. Ils s'effacent en descendant. Par-dessus, des constellations aux traits fins sur une poussière d'étoiles.
@@ -123,16 +146,17 @@ dans une copie locale, sauf demande explicite (`HUB_SOCLE_LOCAL=1`, qui lit
 sans le raccourci (ni module, ni indication « Ctrl K ») et un `::warning::` le
 dit ; il revient de lui-même à la première version du socle qui le livre.
 
-**Les guides suivent la langue choisie** (`scripts/guides.mjs`). Chaque page de
+**Les guides suivent la langue de la page** (`scripts/guides.mjs`). Chaque page de
 contenu déclare sa traduction (`<link rel="alternate" hreflang>`, posé par le
 socle) : une page et sa traduction ne font qu'**un** guide, montré dans la
-langue choisie. Sous un guide traduit, « Read in English » ou « Lire en
+langue de la page. Sous un guide traduit, « Read in English » ou « Lire en
 français » mène à l'autre version ; un guide d'une seule langue porte une
 étiquette (« FR ») quand elle diffère de celle de la page. En anglais, les
 guides traduits passent en tête de leur groupe, et le lien « Guide » d'une
 carte mène au premier guide anglais de l'app (« Guide (FR) » s'il n'en a pas).
-Le HTML servi reste français et lie **toutes** les pages, traductions
-comprises : aucune ne perd le seul lien qui la relie à l'origine.
+Chaque index lie **toutes** les pages, l'une par son titre, sa traduction par
+« Read in English » ou « Lire en français » : aucune ne perd le seul lien qui
+la relie à l'origine.
 
 ## Publication
 
