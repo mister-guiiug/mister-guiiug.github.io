@@ -18,6 +18,48 @@
  * installée. Le changer créerait une seconde application ; le garder fait que
  * Chrome met à jour celle qui est installée, portée comprise.
  */
+
+/** « Dans la portée », au sens du manifeste : même origine, chemin préfixé. */
+export const dansLaPortee = (url, portee) => {
+  const u = new URL(url);
+  const p = new URL(portee, u.origin);
+  return u.origin === p.origin && u.pathname.startsWith(p.pathname);
+};
+
+/**
+ * Ce qui rendrait le hub installable « par-dessus » les apps.
+ *
+ * @param {{ scope?: string }} manifeste
+ * @param {object} opts
+ * @param {string} opts.origine
+ * @param {string[]} opts.appIds  identifiants de dépôt (`mister-settle`, …)
+ * @returns {null | { code: string, detail: string, apps?: string[] }}
+ */
+export function problemePorteeHub(manifeste, { origine, appIds }) {
+  if (!manifeste || typeof manifeste.scope !== 'string' || !manifeste.scope) {
+    return { code: 'scope-absent', detail: 'manifeste du hub sans scope' };
+  }
+  const scope = new URL(manifeste.scope, origine);
+  const chemin = scope.pathname;
+  if (chemin === '/' || chemin === '') {
+    return {
+      code: 'scope-racine',
+      detail: `scope « ${manifeste.scope} » couvre toute l'origine : aucune app ne serait plus installable`,
+    };
+  }
+  const couvertes = appIds.filter(id =>
+    dansLaPortee(`${origine.replace(/\/$/, '')}/${id}/`, scope.href)
+  );
+  if (couvertes.length) {
+    return {
+      code: 'scope-apps',
+      detail: `scope « ${manifeste.scope} » couvre ${couvertes.length} app(s)`,
+      apps: couvertes,
+    };
+  }
+  return null;
+}
+
 export function manifesteHub({ origine, compte, description, theme, langue = 'fr' }) {
   // L'ANGLAIS A SON MANIFESTE, sous /en/ : une autre application installable,
   // dans sa langue, dont la portée ne couvre elle aussi aucune application.
