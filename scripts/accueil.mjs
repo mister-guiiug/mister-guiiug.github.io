@@ -578,6 +578,10 @@ const libellesClient = ctx => {
       guidesIntro:
         'Les pages de contenu des applications : méthodes pas à pas, règles et questions fréquentes.',
       aPropos: 'À propos',
+      android: 'Installer sur Android',
+      androidRenvoi:
+        'Sur Chrome Android, une ancienne installation du catalogue peut bloquer celle des applications. Ordre recommandé, purge WebAPK et chrome://webapks.',
+      androidLien: 'Voir la marche à suivre',
       presentation: 'Présentation',
       skip: 'Aller aux applications',
       installer: 'Installer le catalogue',
@@ -658,6 +662,10 @@ const libellesClient = ctx => {
       guides: 'Practical guides',
       guidesIntro: `Content pages from the apps: step-by-step methods, rules and FAQs${enFrancais}.`,
       aPropos: 'About (FR)',
+      android: 'Install on Android (FR)',
+      androidRenvoi:
+        'On Chrome Android, an old catalogue install can block installing the apps. Recommended order, WebAPK cleanup and chrome://webapks.',
+      androidLien: 'See the steps (FR)',
       presentation: 'Overview (FR)',
       skip: 'Skip to apps',
       installer: 'Install this catalogue',
@@ -1029,6 +1037,10 @@ function enteteHtml(ctx) {
           <button type="button" class="chip" id="hasard" data-i18n="hasard">Au hasard</button>
           <button type="button" class="installer" id="installer" data-i18n="installer" hidden>Installer le catalogue</button>
         </p>
+        <p class="android-renvoi">
+          <span data-i18n="androidRenvoi">Sur Chrome Android, une ancienne installation du catalogue peut bloquer celle des applications. Ordre recommandé, purge WebAPK et chrome://webapks.</span>
+          <a href="${origine}/installer-android.html" data-i18n="androidLien">Voir la marche à suivre</a>
+        </p>
       </div>
 ${featuredHtml}`
           : ''
@@ -1043,7 +1055,9 @@ function piedHtml(ctx) {
   return `
     <footer>
       <p>
-        <a href="${origine}/a-propos.html" data-i18n="aPropos">À propos</a>${
+        <a href="${origine}/a-propos.html" data-i18n="aPropos">À propos</a>
+        ·
+        <a href="${origine}/installer-android.html" data-i18n="android">Installer sur Android</a>${
           accueil && nbGuides
             ? `
         ·

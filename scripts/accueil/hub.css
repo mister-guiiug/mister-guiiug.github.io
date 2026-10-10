@@ -215,6 +215,17 @@ html {
   outline: 3px solid var(--lien);
   outline-offset: 2px;
 }
+.android-renvoi {
+  margin: 0.85rem 0 0;
+  max-width: 36rem;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--hub-fg, var(--texte)) 78%, transparent);
+}
+.android-renvoi a {
+  display: inline-block;
+  margin-top: 0.25rem;
+}
 .hero-actions {
   display: flex;
   flex-wrap: wrap;

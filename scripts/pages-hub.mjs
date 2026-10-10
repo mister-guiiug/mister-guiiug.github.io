@@ -431,6 +431,7 @@ ${fil
       <nav class="sites" aria-label="Pages du hub">
         <a href="${origine}/"${courant('/')}>Catalogue</a>
         <a href="${origine}/a-propos.html"${courant('/a-propos.html')}>À propos</a>
+        <a href="${origine}/installer-android.html"${courant('/installer-android.html')}>Android</a>
       </nav>
     </header>${filHtml}
     <main id="contenu">
@@ -442,6 +443,7 @@ ${corps}
       <p>
         <a href="${origine}/">Toutes les applications</a> ·
         <a href="${origine}/a-propos.html">À propos</a> ·
+        <a href="${origine}/installer-android.html">Installer sur Android</a> ·
         <a href="https://github.com/${compte}">Code source sur GitHub</a>
       </p>
       <p>${date ? `Mis à jour le ${JETONS.majFr} · ` : ''}<a href="https://github.com/${compte}/${compte}.github.io/blob/main/LICENSE">Licence MIT</a></p>

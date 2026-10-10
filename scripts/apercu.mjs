@@ -19,6 +19,7 @@ export const FICHIERS_DU_HUB = [
   'previews/',
   'index.html',
   'a-propos.html',
+  'installer-android.html',
   'mister-quota.html',
   'manifest.webmanifest',
   'en/manifest.webmanifest',

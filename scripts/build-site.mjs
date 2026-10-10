@@ -72,9 +72,10 @@ import { JETON_CSP, poserPolitique } from './csp.mjs';
 import { DESCRIPTIONS_EN, appsSansDescriptionEn } from './descriptions-en.mjs';
 import { FICHIERS_DU_CIEL, cielSvg } from './ciel.mjs';
 import { serviceWorkerHub } from './hub-sw.mjs';
-import { manifesteHub } from './manifeste-hub.mjs';
+import { manifesteHub, problemePorteeHub } from './manifeste-hub.mjs';
 import { INDEXNOW_CLE } from './indexnow-cle.mjs';
 import { appsNonRelevees, pageAPropos } from './page-a-propos.mjs';
+import { pageInstallerAndroid } from './page-installer-android.mjs';
 import {
   JETONS,
   PAGES_BUREAU,
@@ -330,6 +331,27 @@ const manifesteEn = manifesteHub({
   langue: 'en',
 });
 
+// GARDE DE PORTÉE : une régression vers « / » rendrait toutes les apps
+// impossibles à installer sur Android dès que le hub l'est. Échoue ici, avant
+// de publier, plutôt qu'après coup sur un téléphone.
+const appIdsPages = FAMILY_APPS.filter(a => a.appUrl.startsWith(`${FAMILY_ORIGIN}/`)).map(
+  a => a.id
+);
+for (const [nom, m] of [
+  ['fr', manifeste],
+  ['en', manifesteEn],
+]) {
+  const probleme = problemePorteeHub(m, {
+    origine: APERCU ?? FAMILY_ORIGIN,
+    appIds: appIdsPages,
+  });
+  if (probleme) {
+    console.error(`::error::Manifeste hub (${nom}) : ${probleme.detail}`);
+    if (probleme.apps?.length) console.error(`  apps : ${probleme.apps.join(', ')}`);
+    process.exit(1);
+  }
+}
+
 /**
  * Les fichiers de premier niveau que sert le hub : les SEULS, avec
  * `/previews/…`, auxquels son worker réponde. Tout ce qui est sous `/<app>/`
@@ -349,6 +371,7 @@ const CHEMINS_DU_HUB = [
   '/offline.html',
   '/404.html',
   '/a-propos.html',
+  '/installer-android.html',
   ...bureau.map(b => b.chemin),
   '/manifest.webmanifest',
   '/og-image.jpg',
@@ -460,6 +483,7 @@ const aProposHtml = pageAPropos({
   avecIssues,
   sponsorUrl: SPONSOR_URL,
 });
+const installerAndroidHtml = pageInstallerAndroid(commun);
 // Une app née au catalogue après le relevé : la page la dit « pas encore
 // relevée » plutôt que de lui prêter des pratiques ; la CI le signale.
 const aRelever = appsNonRelevees(FAMILY_APPS);
@@ -491,6 +515,11 @@ const pagesDuPlan = [
   // la politique de l'accueil (script et styles en ligne, voir plus bas).
   ...pagesAccueil.map(p => ({ chemin: p.chemin, fichier: p.fichier, texte: p.texte, accueil: true, langue: p.langue })),
   { chemin: '/a-propos.html', fichier: 'a-propos.html', texte: aProposHtml },
+  {
+    chemin: '/installer-android.html',
+    fichier: 'installer-android.html',
+    texte: installerAndroidHtml,
+  },
   ...pagesBureauHtml.map(p => ({ chemin: p.chemin, fichier: p.chemin.slice(1), texte: p.texte })),
 ];
 const aujourdhui = new Date().toISOString().slice(0, 10);
