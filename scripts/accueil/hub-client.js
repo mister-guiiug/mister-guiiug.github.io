@@ -554,6 +554,12 @@
   appliqueTitre();
   // Installé, le chapeau dit que chaque app s'ouvre hors du catalogue.
   if (isPwa() && chapeau && T.chapeauPwa) chapeau.textContent = T.chapeauPwa;
+  // Filet : la media query CSS suffit en principe ; data-motion coupe aussi
+  // si le navigateur n’honore pas prefers-reduced-motion sur les animations.
+  var constellation = document.querySelector('.constellation');
+  if (constellation && mouvementReduit()) {
+    constellation.setAttribute('data-motion', 'off');
+  }
   applyTheme(theme());
   readUrl();
 

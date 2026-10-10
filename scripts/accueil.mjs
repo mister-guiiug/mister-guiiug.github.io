@@ -337,6 +337,45 @@ ${
     </aside>`;
 };
 
+/**
+ * Frise d’icônes du catalogue dans le hero : stables d’abord, au plus 12,
+ * seulement celles dont l’icône a été collectée. Absent si aucune icône.
+ */
+const CONSTELLATION_MAX = 12;
+
+const constellationHtml = ctx => {
+  const { apps, iconeParApp } = ctx;
+  const selection = apps
+    .filter(a => iconeParApp.has(a.id))
+    .slice()
+    .sort(ordreApps)
+    .slice(0, CONSTELLATION_MAX);
+  if (!selection.length) return '';
+  const pastilles = selection
+    .map((app, i) => {
+      const icone = iconeParApp.get(app.id);
+      const lazy = i >= 4 ? '\n              loading="lazy"' : '';
+      const img = `<img
+              class="constellation-img"
+              src="${echappe(icone)}"
+              alt=""
+              width="48"
+              height="48"
+              decoding="async"${lazy}
+            />`;
+      return `        <li class="constellation-item" role="listitem">
+          ${lienPrincipal(ctx, app, img, ` class="constellation-lien" aria-label="${echappe(app.name)}"`)}
+        </li>`;
+    })
+    .join('\n');
+  return `
+    <aside class="constellation" aria-label="Aperçu des applications" data-i18n-aria="constellation">
+      <ul class="constellation-liste" role="list">
+${pastilles}
+      </ul>
+    </aside>`;
+};
+
 const carteCoulisse = (ctx, s) => {
   // Le squelette a sa page de contenu : elle n'était liée de nulle part.
   const pages = ctx.pagesParSite.get(s.nom) ?? [];
@@ -586,6 +625,7 @@ const libellesClient = ctx => {
       skip: 'Aller aux applications',
       installer: 'Installer le catalogue',
       projecteur: 'Coup de projecteur',
+      constellation: 'Aperçu des applications',
       maturiteTous: 'Toutes',
       maturiteFiltre: 'Maturité',
       compte: `${nbApps} applications · ${nbCats} catégories`,
@@ -670,6 +710,7 @@ const libellesClient = ctx => {
       skip: 'Skip to apps',
       installer: 'Install this catalogue',
       projecteur: 'Spotlight',
+      constellation: 'Apps at a glance',
       maturiteTous: 'All',
       maturiteFiltre: 'Maturity',
       compte: `${nbApps} apps · ${nbCats} categories`,
@@ -744,6 +785,7 @@ export function rendreAccueil(donnees) {
 
   const sections = sectionsHtml(ctx);
   const featuredHtml = projecteurHtml(ctx, featuredApp);
+  const constellation = constellationHtml(ctx);
 
   const urlsHasard = apps
     .filter(a => a.maturity === 'stable' && surOrigine(a.appUrl))
@@ -811,6 +853,7 @@ export function rendreAccueil(donnees) {
       jsonLd: jsonLdTexte(donneesStructurees(ctx, langue)),
       navCats,
       featuredHtml,
+      constellationHtml: constellation,
       videSuggestions,
       sections,
       guidesHtml: renvoiGuides(ctx, nbGuides),
@@ -959,7 +1002,7 @@ ${css}
  * suit, et le script n'a plus rien à réécrire.
  */
 function enteteHtml(ctx) {
-  const { origine, compte, page, langue, featuredHtml } = ctx;
+  const { origine, compte, page, langue, featuredHtml, constellationHtml: constellation = '' } = ctx;
   const adresses = ADRESSES[page];
   const lienLangue = (l, nom, drapeau) =>
     `<a href="${origine}${adresses[l]}" hreflang="${l}" lang="${l}" aria-label="${nom}" title="${nom}"${l === langue ? ' aria-current="page"' : ''} data-lien-langue>
@@ -1042,6 +1085,7 @@ function enteteHtml(ctx) {
           <a href="${origine}/installer-android.html" data-i18n="androidLien">Voir la marche à suivre</a>
         </p>
       </div>
+${constellation}
 ${featuredHtml}`
           : ''
       }

@@ -243,6 +243,116 @@ html {
 .hero-texte {
   min-width: 0;
 }
+/*
+ * CONSTELLATION : aperçu des icônes du catalogue dans le hero. Entrée en
+ * cascade, puis dérive très légère. Absent si aucune icône n’a été collectée.
+ */
+.constellation {
+  margin: 0.85rem 0 1.35rem;
+}
+.constellation-liste {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* Annule la grille des ul du catalogue. */
+  grid-template-columns: none;
+}
+.constellation-item {
+  --i: 0;
+  margin: 0;
+  padding: 0;
+  animation:
+    constellation-in 0.55s ease both,
+    constellation-drift 5.5s ease-in-out infinite;
+  animation-delay:
+    calc(var(--i) * 70ms),
+    calc(0.55s + var(--i) * 70ms);
+}
+/* Stagger sans attribut style (CSP : pas de style=). Jusqu’à CONSTELLATION_MAX. */
+.constellation-item:nth-child(1) {
+  --i: 0;
+}
+.constellation-item:nth-child(2) {
+  --i: 1;
+}
+.constellation-item:nth-child(3) {
+  --i: 2;
+}
+.constellation-item:nth-child(4) {
+  --i: 3;
+}
+.constellation-item:nth-child(5) {
+  --i: 4;
+}
+.constellation-item:nth-child(6) {
+  --i: 5;
+}
+.constellation-item:nth-child(7) {
+  --i: 6;
+}
+.constellation-item:nth-child(8) {
+  --i: 7;
+}
+.constellation-item:nth-child(9) {
+  --i: 8;
+}
+.constellation-item:nth-child(10) {
+  --i: 9;
+}
+.constellation-item:nth-child(11) {
+  --i: 10;
+}
+.constellation-item:nth-child(12) {
+  --i: 11;
+}
+.constellation-lien {
+  display: block;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.85rem;
+  overflow: hidden;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--texte) 12%, transparent);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.constellation-lien:hover,
+.constellation-lien:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--texte) 16%, transparent);
+}
+.constellation-lien:focus-visible {
+  outline: 2px solid var(--lien);
+  outline-offset: 3px;
+}
+.constellation-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+@keyframes constellation-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.6rem) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes constellation-drift {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-0.15rem);
+  }
+}
 .marque {
   font-family: "Trebuchet MS", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   font-size: clamp(1.35rem, 2.6vw, 1.65rem);
@@ -1137,6 +1247,12 @@ footer p:last-child {
   .marque {
     animation: none;
   }
+  .constellation-item {
+    animation: none;
+  }
+  .constellation-lien {
+    transition: none;
+  }
   html.js .visuel-img {
     transition: none;
   }
@@ -1147,6 +1263,12 @@ footer p:last-child {
   .filtres-panel {
     transition: none;
   }
+}
+.constellation[data-motion='off'] .constellation-item {
+  animation: none;
+}
+.constellation[data-motion='off'] .constellation-lien {
+  transition: none;
 }
 @media (forced-colors: active) {
   .carte,
@@ -1189,6 +1311,9 @@ footer p:last-child {
     text-align: center;
   }
   .hero-actions {
+    justify-content: center;
+  }
+  .constellation-liste {
     justify-content: center;
   }
   .collant .sommaire-wrap {

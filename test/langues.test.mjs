@@ -82,6 +82,7 @@ test('la page anglaise est en anglais, la française en français', () => {
     ['Aller aux applications', 'Skip to apps'],
     ['Rechercher…', 'Search…'],
     ['Coup de projecteur', 'Spotlight'],
+    ['Aperçu des applications', 'Apps at a glance'],
     ['Effacer le filtre', 'Clear filter'],
     ['Stables d’abord', 'Stable first'],
     ['Voir tous les guides', 'See all guides'],

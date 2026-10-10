@@ -224,3 +224,43 @@ test('accueil : sans script, les miniatures restent visibles', () => {
     }
   }
 });
+
+test('accueil : constellation d’icônes dans le hero quand des icônes existent', () => {
+  const html = rendreAccueil(
+    donnees({
+      iconeParApp: new Map([
+        ['miss-alpha', `${ORIGINE}/miss-alpha/icon-192.png`],
+        ['mister-beta', `${ORIGINE}/mister-beta/icon-192.png`],
+      ]),
+    })
+  ).html;
+  assert.match(html, /class="constellation"/);
+  assert.match(html, /aria-label="Aperçu des applications"/);
+  const bloc = /<aside class="constellation"[\s\S]*?<\/aside>/.exec(html)?.[0] ?? '';
+  assert.ok(bloc, 'aside.constellation présent');
+  // Stables d’abord : miss-alpha (stable) avant mister-beta (bêta).
+  assert.ok(
+    bloc.indexOf('miss-alpha/icon-192.png') < bloc.indexOf('mister-beta/icon-192.png'),
+    'ordre stables d’abord'
+  );
+  assert.equal((bloc.match(/class="constellation-lien"/g) ?? []).length, 2);
+  assert.doesNotMatch(bloc, /\sstyle="/, 'CSP : pas d’attribut style');
+  // Les 4 premières ne sont pas lazy ; ici 2 pastilles → aucune lazy.
+  assert.doesNotMatch(bloc, /loading="lazy"/);
+  // Entre le hero-texte et le projecteur.
+  assert.ok(
+    html.indexOf('class="hero-texte"') < html.indexOf('class="constellation"') &&
+      html.indexOf('class="constellation"') < html.indexOf('class="projecteur"'),
+    'constellation entre hero et projecteur'
+  );
+  const style = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
+  assert.match(style, /@keyframes constellation-in/);
+  assert.match(style, /prefers-reduced-motion:\s*reduce/);
+  // Le client pose data-motion=off si prefers-reduced-motion (pas le bootstrap thème).
+  assert.match(html, /setAttribute\('data-motion',\s*'off'\)/);
+});
+
+test('accueil : pas de constellation sans icône collectée', () => {
+  const { html } = rendreAccueil(donnees({ iconeParApp: new Map() }));
+  assert.doesNotMatch(html, /class="constellation"/);
+});
