@@ -51,6 +51,17 @@ export const LANGUES = ['fr', 'en'];
 export const fichierDe = chemin => (chemin.endsWith('/') ? `${chemin}index.html` : chemin).slice(1);
 
 /**
+ * Les applications du catalogue sans description anglaise. Le socle la porte
+ * dans `FAMILY_APPS` (`descriptionEn`, depuis sa 6.26.0) ; sans elle, la page
+ * anglaise afficherait une carte en français. La construction s'arrête et les
+ * nomme (voir build-site.mjs).
+ *
+ * @param {{ id: string, descriptionEn?: string }[]} apps
+ */
+export const appsSansDescriptionEn = apps =>
+  apps.filter(a => typeof a.descriptionEn !== 'string' || !a.descriptionEn.trim()).map(a => a.id);
+
+/**
  * Un lien vers une page du hub, apparié : la traduction pose l'adresse de la
  * langue de la page (voir traduire.mjs).
  */
@@ -216,7 +227,6 @@ const carteApp = (ctx, app, featuredId) => {
     apercus,
     iconeParApp,
     enPanne,
-    descriptionsEn,
     pageDeBureau,
     libellesFr,
     libellesEn,
@@ -227,7 +237,6 @@ const carteApp = (ctx, app, featuredId) => {
   const apercu = apercus.get(app.id);
   const icone = iconeParApp.get(app.id) ?? null;
   const horsLigne = surOrigine(app.appUrl) && enPanne.some(x => x.startsWith(`${app.id} (`));
-  const descEn = descriptionsEn[app.id] ?? app.description;
   const lienGuide = lienGuideDeCarte(regrouperGuides(pages));
   const plateforme = bureau ? 'desktop' : 'web';
   const aLaUne = featuredId && app.id === featuredId;
@@ -242,7 +251,7 @@ const carteApp = (ctx, app, featuredId) => {
   const recherche = [
     app.name,
     app.description,
-    descEn,
+    app.descriptionEn,
     libellesFr.categories?.[app.category] ?? '',
     libellesEn.categories?.[app.category] ?? '',
     app.maturity,
@@ -281,7 +290,7 @@ const carteApp = (ctx, app, featuredId) => {
 ${visuel}
             <div class="corps">
               <h3><span class="nom">${echappe(app.name)}</span>${maturite(libellesFr, app.maturity)}${badgeBureau}${badgeUne}${badgePanne}</h3>
-              <p${descriptionsEn[app.id] ? '' : ' lang="fr"'} data-fr="${echappe(app.description)}" data-en="${echappe(descEn)}">${echappe(app.description)}</p>${actions}
+              <p data-fr="${echappe(app.description)}" data-en="${echappe(app.descriptionEn)}">${echappe(app.description)}</p>${actions}
             </div>
           </li>`;
 };
@@ -307,12 +316,11 @@ ${dansCat.map(a => carteApp(ctx, a, ctx.featuredId)).join('\n')}
 
 const projecteurHtml = (ctx, featuredApp) => {
   if (!featuredApp) return '';
-  const { origine, pagesParApp, apercus, iconeParApp, descriptionsEn, pageDeBureau } = ctx;
+  const { origine, pagesParApp, apercus, iconeParApp, pageDeBureau } = ctx;
   const apercu = apercus.get(featuredApp.id);
   const icone = iconeParApp.get(featuredApp.id) ?? null;
   const featuredPages = pagesParApp.get(featuredApp.id) ?? [];
   const featuredGuide = lienGuideDeCarte(regrouperGuides(featuredPages));
-  const featuredDescEn = descriptionsEn[featuredApp.id] ?? featuredApp.description;
   return `
     <aside class="projecteur" aria-labelledby="projecteur-titre">
       <p class="projecteur-label" id="projecteur-titre" data-i18n="projecteur">Coup de projecteur</p>
@@ -327,7 +335,7 @@ ${
 }
         <div class="corps">
           <h2 class="projecteur-nom">${echappe(featuredApp.name)}</h2>
-          <p data-fr="${echappe(featuredApp.description)}" data-en="${echappe(featuredDescEn)}">${echappe(featuredApp.description)}</p>
+          <p data-fr="${echappe(featuredApp.description)}" data-en="${echappe(featuredApp.descriptionEn)}">${echappe(featuredApp.description)}</p>
           <p class="actions">
             ${lienPrincipal(ctx, featuredApp, pageDeBureau.has(featuredApp.id) ? '<span data-i18n="presentation">Présentation</span>' : '<span data-i18n="ouvrir">Ouvrir</span>', ' class="action action-ouvrir"')}
             ${featuredGuide}
@@ -733,11 +741,11 @@ const libellesClient = ctx => {
  * @param {string} donnees.theme          la couleur de thème
  * @param {string} donnees.sponsorUrl
  * @param {string} donnees.imageEmpreinte l'empreinte de `og-image.jpg`, pour son URL
- * @param {object[]} donnees.apps         `FAMILY_APPS`
+ * @param {object[]} donnees.apps         `FAMILY_APPS`, chacune avec sa `descriptionEn`
+ *   (voir `appsSansDescriptionEn`)
  * @param {string[]} donnees.categories   `CATEGORIES`
  * @param {object} donnees.libellesFr     libellés du socle, en français
  * @param {object} donnees.libellesEn     libellés du socle, en anglais
- * @param {Record<string, string>} donnees.descriptionsEn
  * @param {Map<string, object[]>} donnees.pagesParApp   id → pages de contenu
  * @param {Map<string, { webp: boolean }>} donnees.apercus  id → sa miniature, ÉCRITE
  *   dans previews/ (JPEG toujours, WebP si `webp`) ; absente, la carte prend l'icône

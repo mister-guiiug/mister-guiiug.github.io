@@ -121,10 +121,10 @@ et un robot ou un aperçu de lien ne voyait jamais l'anglais.
   application installable, de portée `/en/`, qui ne couvre elle non plus
   aucune app.
 
-Les catégories et maturités viennent du socle ; les descriptions anglaises,
-de `scripts/descriptions-en.mjs`. Une app née au catalogue sans description
-anglaise garde la française, marquée `lang="fr"`, et la construction la nomme
-dans un `::warning::`. Les palettes vivent dans
+Les catégories, les maturités et les descriptions anglaises viennent du socle :
+chaque app de `FAMILY_APPS` porte sa `descriptionEn`, depuis la 6.26.0. Si une
+app n'en a pas, la construction s'arrête et la nomme dans un `::error::` : sinon,
+la page anglaise afficherait sa carte en français. Les palettes vivent dans
 `scripts/palette.mjs`, écrites une fois.
 
 **Le fond est un ciel.** En haut de la page, trois nuages de nébuleuse en dégradés : une aube pastel en clair, violet, bleu et rose en sombre. Ils s'effacent en descendant. Par-dessus, des constellations aux traits fins sur une poussière d'étoiles.

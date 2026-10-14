@@ -7,8 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import vm from 'node:vm';
-import { rendreAccueil } from '../scripts/accueil.mjs';
-import { DESCRIPTIONS_EN, appsSansDescriptionEn } from '../scripts/descriptions-en.mjs';
+import { appsSansDescriptionEn, rendreAccueil } from '../scripts/accueil.mjs';
 import { donneesFactices } from './catalogue-factice.mjs';
 
 /** La feuille de style telle que la page la publie : palettes posées. */
@@ -36,26 +35,28 @@ test('liens : aucun target=_blank servi ; ceux de la famille sont marqués pour 
   }
 });
 
-test('descriptions anglaises : miss-devises en a une, et les manquantes sont nommées', () => {
-  assert.match(DESCRIPTIONS_EN['miss-devises'], /^Visual currency converter/);
+test('descriptions anglaises : les apps du catalogue sans descriptionEn sont nommées', () => {
   assert.deepEqual(
-    appsSansDescriptionEn([{ id: 'miss-dice' }, { id: 'miss-nouvelle' }, { id: 'mister-vide' }], {
-      'miss-dice': 'Dice.',
-      'mister-vide': '  ',
-    }),
+    appsSansDescriptionEn([
+      { id: 'miss-dice', descriptionEn: 'Dice.' },
+      { id: 'miss-nouvelle' },
+      { id: 'mister-vide', descriptionEn: '  ' },
+    ]),
     ['miss-nouvelle', 'mister-vide']
   );
-  // Toutes les apps que le hub connaît par leur nom ont une description.
-  assert.deepEqual(appsSansDescriptionEn(Object.keys(DESCRIPTIONS_EN).map(id => ({ id }))), []);
+  assert.deepEqual(appsSansDescriptionEn(donneesFactices().apps), []);
 });
 
-test('descriptions anglaises : une carte sans traduction garde le français, marqué lang="fr"', () => {
+test('descriptions anglaises : chaque carte anglaise prend la descriptionEn du catalogue', () => {
   const { pages } = rendreAccueil(donneesFactices());
+  const fr = pages.find(p => p.chemin === '/').texte;
   const en = pages.find(p => p.chemin === '/en/').texte;
-  // Miss Alpha a sa description anglaise ; Mister Beta non : en anglais, sa
-  // carte garde le français, dit tel.
   assert.match(en, /<p>Described &lt;b&gt;in English&lt;\/b&gt;\.<\/p>/);
-  assert.match(en, /<p lang="fr">Une application en bêta\.<\/p>/);
+  assert.match(en, /<p>An app in beta\.<\/p>/);
+  assert.match(en, /<p>A desktop app\.<\/p>/);
+  // Plus aucune carte gardée en français sur la page anglaise.
+  assert.doesNotMatch(en, /<p lang="fr">/);
+  assert.match(fr, /<p>Une application en bêta\.<\/p>/);
 });
 
 /** Les jetons d'un bloc de la feuille de style, par sélecteur exact. */
