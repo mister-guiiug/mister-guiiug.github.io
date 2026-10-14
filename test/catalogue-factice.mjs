@@ -13,6 +13,7 @@ export const APPS = [
     id: 'miss-alpha',
     name: 'Miss <Alpha> & "Co"',
     description: `Décrit ${PIEGE} & "entre guillemets"`,
+    descriptionEn: 'Described <b>in English</b>.',
     category: 'jeux',
     maturity: 'stable',
     platform: 'web',
@@ -23,6 +24,7 @@ export const APPS = [
     id: 'mister-beta',
     name: 'Mister Beta',
     description: 'Une application en bêta.',
+    descriptionEn: 'An app in beta.',
     category: 'outils',
     maturity: 'beta',
     platform: 'web',
@@ -33,6 +35,7 @@ export const APPS = [
     id: 'mister-bureau',
     name: 'Mister Bureau',
     description: 'Une application de bureau.',
+    descriptionEn: 'A desktop app.',
     category: 'outils',
     maturity: 'alpha',
     platform: 'desktop',
@@ -62,7 +65,6 @@ export const donneesFactices = (surcharge = {}) => ({
   categories: ['jeux', 'outils', 'sante'],
   libellesFr: LIBELLES_FR,
   libellesEn: LIBELLES_EN,
-  descriptionsEn: { 'miss-alpha': 'Described <b>in English</b>.' },
   pagesParApp: new Map([
     [
       'miss-alpha',

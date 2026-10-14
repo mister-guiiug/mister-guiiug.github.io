@@ -65,11 +65,10 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { rendreAccueil } from './accueil.mjs';
+import { appsSansDescriptionEn, rendreAccueil } from './accueil.mjs';
 import { collecter, lireOctets } from './collecte.mjs';
 import { adresseApercu, versApercu } from './apercu.mjs';
 import { JETON_CSP, poserPolitique } from './csp.mjs';
-import { DESCRIPTIONS_EN, appsSansDescriptionEn } from './descriptions-en.mjs';
 import { FICHIERS_DU_CIEL, cielSvg } from './ciel.mjs';
 import { serviceWorkerHub } from './hub-sw.mjs';
 import { manifesteHub, problemePorteeHub } from './manifeste-hub.mjs';
@@ -191,14 +190,15 @@ if (!command) {
   );
 }
 
-// Une app née au catalogue sans description anglaise : sa carte garde le
-// français en anglais, marqué lang="fr" ; la CI le signale.
+// Une app du catalogue sans description anglaise : la page anglaise
+// afficherait sa carte en français. La construction s'arrête avant de publier.
 {
   const sansAnglais = appsSansDescriptionEn(FAMILY_APPS);
   if (sansAnglais.length) {
-    console.log(
-      `::warning::Description anglaise absente pour ${sansAnglais.join(', ')} : l'ajouter à scripts/descriptions-en.mjs.`
+    console.error(
+      `::error::Description anglaise absente du catalogue ${version} pour ${sansAnglais.join(', ')} : ajouter descriptionEn dans FAMILY_APPS (apps-catalog.js du socle).`
     );
+    process.exit(1);
   }
 }
 
@@ -299,7 +299,6 @@ const {
   categories: CATEGORIES,
   libellesFr,
   libellesEn,
-  descriptionsEn: DESCRIPTIONS_EN,
   pagesParApp,
   apercus,
   iconeParApp,
