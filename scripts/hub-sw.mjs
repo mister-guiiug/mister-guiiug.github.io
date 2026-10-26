@@ -30,8 +30,22 @@
  * reprend dès son activation (`clientsClaim` de Workbox).
  */
 
-/** Le nom du cache. À changer à chaque modification du worker. */
-export const CACHE_HUB = 'hub-v6';
+/** La version du cache. À changer à chaque modification du worker. */
+export const CACHE_HUB = 'hub-v7';
+
+/**
+ * Le nom complet du cache : sa version, puis la PORTÉE du worker.
+ *
+ * LE CACHE DU HUB DISPARAISSAIT AVEC LA PURGE D'UNE APP. Le bouton « Recharger
+ * l'application » des apps (`applyUpdate` du socle) vide le Cache Storage de
+ * l'origine, sauf les caches dont le nom FINIT par la portée d'un autre worker
+ * — c'est ainsi que Workbox nomme les siens (`workbox-precache-v2-<portée>`).
+ * `hub-v6` ne portait aucune portée : relevé le 26/10/2026 sur miss-dice, il
+ * était effacé à chaque purge, et le hub perdait son mode hors ligne.
+ *
+ * @param {string} portee  la portée du worker, `self.registration.scope`
+ */
+export const cacheDuHub = portee => `${CACHE_HUB}-${portee}`;
 
 /** Le préfixe des caches du hub, et des seuls que ce worker ait le droit d'effacer. */
 export const PREFIXE_CACHE_HUB = 'hub-';
@@ -77,7 +91,8 @@ export function serviceWorkerHub({
  * Stratégie : réseau d'abord ; le cache ne sert que hors ligne.
  * Engendré par scripts/build-site.mjs (voir scripts/hub-sw.mjs).
  */
-const CACHE = '${CACHE_HUB}';
+// La portée termine le nom : voir cacheDuHub (scripts/hub-sw.mjs).
+const CACHE = '${CACHE_HUB}-' + self.registration.scope;
 const PREFIXE = '${PREFIXE_CACHE_HUB}';
 const HORS_LIGNE = '${horsLigne}';
 const ESSENTIELS = ${liste(essentiels)};
