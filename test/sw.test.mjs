@@ -10,9 +10,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import vm from 'node:vm';
-import { CACHE_HUB, serviceWorkerHub } from '../scripts/hub-sw.mjs';
+import { CACHE_HUB, cacheDuHub, serviceWorkerHub } from '../scripts/hub-sw.mjs';
 
 const ORIGINE = 'https://mister-guiiug.github.io';
+/** Le cache du worker, tel qu'il le nomme à l'exécution. */
+const CACHE = cacheDuHub(`${ORIGINE}/`);
 
 const SOURCE = serviceWorkerHub({
   compte: 'mister-guiiug',
@@ -74,6 +76,7 @@ function charger({ caches = cachesSimules(), reseau = async () => new Response('
   const appels = [];
   const self = {
     location: new URL(`${ORIGINE}/sw.js`),
+    registration: { scope: `${ORIGINE}/` },
     addEventListener: (type, f) => {
       ecouteurs[type] = f;
     },
@@ -106,18 +109,23 @@ function evenement(url, { method = 'GET', mode = 'no-cors' } = {}) {
   return e;
 }
 
-test('le worker engendré se compile et porte le cache hub-v6', () => {
-  assert.equal(CACHE_HUB, 'hub-v6');
+test('le worker engendré se compile, et son cache finit par sa portée', () => {
+  assert.equal(CACHE_HUB, 'hub-v7');
   assert.doesNotThrow(() => new vm.Script(SOURCE));
-  assert.match(SOURCE, /const CACHE = 'hub-v6';/);
+  assert.match(SOURCE, /const CACHE = 'hub-v7-' \+ self\.registration\.scope;/);
+  // La purge d'une app (applyUpdate du socle) épargne les caches dont le nom
+  // finit par la portée d'un autre worker : c'est ce qui garde celui-ci.
+  assert.equal(CACHE, 'hub-v7-https://mister-guiiug.github.io/');
+  assert.ok(CACHE.endsWith(`${ORIGINE}/`));
 });
 
 test('activate ne supprime QUE les anciens caches du hub', async () => {
   const caches = cachesSimules([
+    'hub-v6',
     'hub-v5',
     'hub-v4',
     'hub-v3',
-    CACHE_HUB,
+    CACHE,
     'workbox-precache-v2-https://mister-guiiug.github.io/miss-dice/',
     'workbox-runtime-https://mister-guiiug.github.io/mister-settle/',
     'supabase-auth',
@@ -127,9 +135,9 @@ test('activate ne supprime QUE les anciens caches du hub', async () => {
   const attentes = [];
   ecouteurs.activate({ waitUntil: p => attentes.push(p) });
   await Promise.all(attentes);
-  assert.deepEqual(caches.supprimes.sort(), ['hub-v3', 'hub-v4', 'hub-v5']);
+  assert.deepEqual(caches.supprimes.sort(), ['hub-v3', 'hub-v4', 'hub-v5', 'hub-v6']);
   assert.deepEqual([...caches.magasins.keys()].sort(), [
-    CACHE_HUB,
+    CACHE,
     'images',
     'supabase-auth',
     'workbox-precache-v2-https://mister-guiiug.github.io/miss-dice/',
@@ -142,7 +150,7 @@ test('install précache l’essentiel et tolère une miniature absente', async (
   const attentes = [];
   ecouteurs.install({ waitUntil: p => attentes.push(p) });
   await Promise.all(attentes);
-  const hub = caches.magasins.get(CACHE_HUB);
+  const hub = caches.magasins.get(CACHE);
   assert.ok(hub.has(`${ORIGINE}/`));
   assert.ok(hub.has(`${ORIGINE}/offline.html`));
   assert.ok(hub.has(`${ORIGINE}/previews/miss-contraction.jpg`));
@@ -199,7 +207,7 @@ test('les requêtes du hub sont servies, et mises en cache sans leur requête', 
     assert.equal(await r.text(), 'réseau');
     await Promise.all(e.attentes);
   }
-  const hub = caches.magasins.get(CACHE_HUB);
+  const hub = caches.magasins.get(CACHE);
   assert.ok(hub.has(`${ORIGINE}/`));
   assert.ok(hub.has(`${ORIGINE}/og-image.jpg`));
   assert.ok(![...hub.keys()].some(k => k.includes('?')), 'une clé de cache garde sa requête');
@@ -211,7 +219,7 @@ test('une erreur HTTP n’est pas mise en cache', async () => {
   ecouteurs.fetch(e);
   assert.equal((await e.reponse).status, 404);
   await Promise.all(e.attentes);
-  assert.equal(caches.magasins.get(CACHE_HUB)?.has(`${ORIGINE}/a-propos.html`) ?? false, false);
+  assert.equal(caches.magasins.get(CACHE)?.has(`${ORIGINE}/a-propos.html`) ?? false, false);
 });
 
 test('hors ligne : la page en cache, sinon la page hors ligne, sinon une erreur réseau', async () => {
@@ -246,7 +254,7 @@ test('« /index.html », lancement de l’app installée, partage la clé de « 
   enLigne.ecouteurs.fetch(visite);
   await (await visite.reponse).text();
   await Promise.all(visite.attentes);
-  const hub = enLigne.caches.magasins.get(CACHE_HUB);
+  const hub = enLigne.caches.magasins.get(CACHE);
   assert.ok(hub.has(`${ORIGINE}/`));
   assert.ok(!hub.has(`${ORIGINE}/index.html`), 'la page est rangée deux fois');
 
@@ -259,7 +267,7 @@ test('« /index.html », lancement de l’app installée, partage la clé de « 
   const installation = [];
   horsLigne.ecouteurs.install({ waitUntil: p => installation.push(p) });
   await Promise.all(installation);
-  assert.ok(!horsLigne.caches.magasins.get(CACHE_HUB).has(`${ORIGINE}/index.html`));
+  assert.ok(!horsLigne.caches.magasins.get(CACHE).has(`${ORIGINE}/index.html`));
   const lancement = evenement(`${ORIGINE}/index.html`, { mode: 'navigate' });
   horsLigne.ecouteurs.fetch(lancement);
   assert.equal(await (await lancement.reponse).text(), 'précache /');
