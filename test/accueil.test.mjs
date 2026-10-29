@@ -16,7 +16,7 @@ const donnees = donneesFactices;
 
 /** Le texte des éléments `<script>` exécutables (ni JSON-LD, ni module externe). */
 const scriptsEnLigne = html =>
-  [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+  [...html.matchAll(/<script>([\s\S]*?)<\/script[^>]*>/gi)].map(m => m[1]);
 
 test('accueil : les noms, descriptions et titres du catalogue sont échappés', () => {
   const { pages } = rendreAccueil(donnees());
@@ -30,7 +30,7 @@ test('accueil : les noms, descriptions et titres du catalogue sont échappés', 
     assert.ok(!html.includes('<script>alert(1)'), `${chemin} : une description injecte un script`);
     // Toute balise <script> ouverte est refermée par la sienne, et par elle seule.
     assert.equal(
-      (html.match(/<script[\s>]/g) ?? []).length,
+      (html.match(/<script[\s>]/gi) ?? []).length,
       (html.match(/<\/script>/g) ?? []).length,
       chemin
     );

@@ -14,6 +14,10 @@ import {
   pageMisterQuota,
 } from '../scripts/pages-hub.mjs';
 
+// Une URL interpolée dans un motif : ses points (et le reste) au sens littéral
+// (CodeQL js/incomplete-hostname-regexp).
+const re = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const ORIGINE = 'https://mister-guiiug.github.io';
 const COMPTE = 'mister-guiiug';
 const IMAGE = { url: `${ORIGINE}/og-image.jpg?v=0a1b2c3d`, alt: 'mosaïque' };
@@ -46,11 +50,13 @@ const jsonLds = html =>
 
 /** Un `<script>` qui s'exécuterait : tout sauf le JSON-LD. */
 const scriptsExecutables = html =>
-  [...html.matchAll(/<script\b([^>]*)>/g)].filter(m => !/type="application\/ld\+json"/.test(m[1]));
+  [...html.matchAll(/<script\b([^>]*)>/gi)].filter(m => !/type="application\/ld\+json"/.test(m[1]));
 
 const titre = html => /<title>([^<]*)<\/title>/.exec(html)?.[1];
 const description = html => /<meta name="description" content="([^"]*)"/.exec(html)?.[1];
-const decode = t => t.replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+// &quot; d'abord : décoder &amp; en premier ferait de « &amp;quot; » un guillemet
+// (CodeQL js/double-escaping).
+const decode = t => t.replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 
 test('entiteEditeur : #org, GuiiuG, le logo et GitHub', () => {
   assert.deepEqual(entiteEditeur({ origine: ORIGINE, compte: COMPTE }), {
@@ -79,7 +85,7 @@ test('À propos : page statique, indexable, JSON-LD AboutPage relié à #org et 
     sponsorUrl: 'https://buymeacoffee.com/mister.guiiug',
   });
   assert.deepEqual(scriptsExecutables(html), []);
-  assert.match(html, new RegExp(`<link rel="canonical" href="${ORIGINE}/a-propos\\.html" />`));
+  assert.match(html, new RegExp(`<link rel="canonical" href="${re(ORIGINE)}/a-propos\\.html" />`));
   assert.match(html, /<meta name="robots" content="index, follow" \/>/);
   assert.match(html, /<meta property="og:locale" content="fr_FR" \/>/);
   const t = decode(titre(html));
@@ -337,6 +343,6 @@ test('404 : noindex, sans canonique ni Open Graph ni script, liens absolus vers 
   for (const [, href] of html.matchAll(/href="([^"]+)"/g)) {
     assert.ok(/^(https:\/\/|#)/.test(href), `lien non absolu : ${href}`);
   }
-  assert.match(html, new RegExp(`href="${ORIGINE}/"`));
+  assert.match(html, new RegExp(`href="${re(ORIGINE)}/"`));
   assert.ok(html.includes(`${ORIGINE}/mister-quota.html`));
 });

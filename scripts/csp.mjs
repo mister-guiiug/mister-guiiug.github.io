@@ -35,7 +35,7 @@ const empreinte = texte => `'sha256-${createHash('sha256').update(texte, 'utf8')
 
 /** Le texte des `<script>` exécutables écrits dans la page : ni `src`, ni JSON-LD. */
 export const scriptsEnLigne = html =>
-  [...html.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script>/g)]
+  [...html.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script[^>]*>/gi)]
     .filter(([, attributs = '']) => !/\ssrc=/.test(attributs) && !/application\/ld\+json/.test(attributs))
     .map(m => m[2]);
 

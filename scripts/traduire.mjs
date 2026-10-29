@@ -36,7 +36,7 @@ const ATTRIBUTS = /\s+data-(?:i18n(?:-[a-z]+)?|(?:fr|en)(?:-[a-z]+)?|alt-(?:fr|e
 /** Applique `fn` au HTML hors des blocs `<script>` et `<style>`. */
 const horsBlocs = (html, fn) =>
   html
-    .split(/(<script\b[\s\S]*?<\/script>|<style\b[\s\S]*?<\/style>)/)
+    .split(/(<script\b[\s\S]*?<\/script[^>]*>|<style\b[\s\S]*?<\/style[^>]*>)/i)
     .map((morceau, i) => (i % 2 ? morceau : fn(morceau)))
     .join('');
 

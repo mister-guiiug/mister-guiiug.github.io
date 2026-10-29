@@ -242,11 +242,9 @@ async function pagesDe(base) {
       if (loc === base || !loc.startsWith(base)) return null;
       const html = await lire(loc);
       if (!html) return null;
-      const titre = /<h1[^>]*>([\s\S]*?)<\/h1>/i
-        .exec(html)?.[1]
-        ?.replace(/<[^>]+>/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+      const h1 = /<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(html)?.[1];
+      const titre =
+        h1 === undefined ? undefined : sansBalises(h1).replace(/\s+/g, ' ').trim();
       const langue = (/<html[^>]*\slang="([a-z]{2})/i.exec(html)?.[1] ?? 'fr').toLowerCase();
       return titre
         ? { url: loc, titre: decode(titre), langue, alternates: alternatesDe(html) }
@@ -510,4 +508,18 @@ export async function collecter({ compte, socle, soi, jeton, strict }) {
     bureau,
     pageDeBureau,
   };
+}
+
+/**
+ * Le texte sans ses balises, retirées jusqu'à ce que plus rien ne change :
+ * une seule passe sur « <scr<b>ipt> » reforme « <script> »
+ * (CodeQL js/incomplete-multi-character-sanitization).
+ */
+function sansBalises(texte) {
+  let avant;
+  do {
+    avant = texte;
+    texte = texte.replace(/<[^>]+>/g, '');
+  } while (texte !== avant);
+  return texte;
 }
