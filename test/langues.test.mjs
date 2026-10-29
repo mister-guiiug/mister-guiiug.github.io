@@ -16,6 +16,10 @@ import { manifesteHub } from '../scripts/manifeste-hub.mjs';
 import { traduire } from '../scripts/traduire.mjs';
 import { ORIGINE, donneesFactices } from './catalogue-factice.mjs';
 
+// Une URL interpolée dans un motif : ses points (et le reste) au sens littéral
+// (CodeQL js/incomplete-hostname-regexp, js/incomplete-sanitization).
+const re = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const A = `${ORIGINE}/miss-alpha/`;
 /** Un guide traduit, apparié par ses `hreflang`, et un guide français seul. */
 const pagesTraduites = new Map([
@@ -32,7 +36,16 @@ const pagesTraduites = new Map([
 const rendu = (surcharge = {}) => rendreAccueil(donneesFactices({ pagesParApp: pagesTraduites, ...surcharge }));
 const pageDe = (pages, chemin) => pages.find(p => p.chemin === chemin);
 /** Le HTML hors des blocs <script> et <style> : ce que lit un robot. */
-const horsBlocs = html => html.replace(/<script\b[\s\S]*?<\/script>|<style\b[\s\S]*?<\/style>/g, '');
+// Retirés jusqu'à ce que plus rien ne change : une seule passe peut reformer un
+// bloc (CodeQL js/incomplete-multi-character-sanitization).
+const horsBlocs = html => {
+  let avant;
+  do {
+    avant = html;
+    html = html.replace(/<script\b[\s\S]*?<\/script[^>]*>|<style\b[\s\S]*?<\/style[^>]*>/gi, '');
+  } while (html !== avant);
+  return html;
+};
 const lien = (html, rel, hreflang) =>
   new RegExp(`<link rel="${rel}"${hreflang ? ` hreflang="${hreflang}"` : ''} href="([^"]+)"`).exec(html)?.[1];
 
@@ -63,7 +76,7 @@ test('hreflang réciproques : chaque page nomme sa traduction, qui la nomme en r
     assert.equal(lien(traduction.texte, 'alternate', p.langue), soi, `${traduction.chemin} → ${p.langue}`);
     // Le français reste la page par défaut, à l'adresse publiée depuis toujours.
     assert.equal(lien(p.texte, 'alternate', 'x-default'), `${ORIGINE}${ADRESSES[p.page].fr}`);
-    assert.match(p.texte, new RegExp(`<meta property="og:url" content="${soi.replace(/[.]/g, '\\.')}" />`));
+    assert.match(p.texte, new RegExp(`<meta property="og:url" content="${re(soi)}" />`));
     assert.match(p.texte, new RegExp(`<meta property="og:locale" content="${p.langue === 'en' ? 'en_GB' : 'fr_FR'}" />`));
   }
 });
@@ -106,7 +119,7 @@ test('l’accueil renvoie à l’index des guides de sa langue, qui les liste to
   for (const langue of ['fr', 'en']) {
     const accueil = pageDe(pages, ADRESSES.accueil[langue]).texte;
     const index = `${ORIGINE}${ADRESSES.guides[langue]}`;
-    assert.match(accueil, new RegExp(`<a href="${index.replace(/[.]/g, '\\.')}" class="action action-guides">`), langue);
+    assert.match(accueil, new RegExp(`<a href="${re(index)}" class="action action-guides">`), langue);
     // Le lien « Guide » de chaque carte reste, vers le guide de la langue.
     const guideCarte = /<a href="([^"]+)"[^>]*class="action action-guide guide-lien"/.exec(accueil)?.[1];
     assert.equal(guideCarte, langue === 'en' ? `${A}en/rules.html` : `${A}regles.html`);
@@ -138,7 +151,7 @@ test('l’index des guides : une CollectionPage du site, dans sa langue', () => 
 test('le script ne réécrit plus la page : il lit les libellés de SA langue', () => {
   const { pages } = rendu();
   for (const p of pages) {
-    const client = [...p.texte.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]).find(s => s.includes('var T = '));
+    const client = [...p.texte.matchAll(/<script>([\s\S]*?)<\/script[^>]*>/gi)].map(m => m[1]).find(s => s.includes('var T = '));
     assert.ok(client, p.chemin);
     assert.doesNotMatch(client, /applyLang|data-set-lang|hub-lang|querySelectorAll\('\[data-i18n\]'\)/, p.chemin);
     const t = JSON.parse(/var T = (.*);\n/.exec(client)[1]);
