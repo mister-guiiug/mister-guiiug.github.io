@@ -938,7 +938,7 @@ const donneesGuides = (ctx, langue, groupes, t) => {
  * (`hreflang`, réciproques : chaque page nomme les deux), son manifeste.
  */
 function teteHtml(ctx) {
-  const { origine, theme, imageEmpreinte, langue, page, titre, descriptionPage, jsonLd, css, t } = ctx;
+  const { origine, compte, theme, imageEmpreinte, langue, page, titre, descriptionPage, jsonLd, css, t } = ctx;
   const adresses = ADRESSES[page];
   const url = `${origine}${adresses[langue]}`;
   const image = `${origine}/og-image.jpg?v=${imageEmpreinte}`;
@@ -969,6 +969,7 @@ function teteHtml(ctx) {
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="${langue === 'en' ? 'en_GB' : 'fr_FR'}" />
     <meta property="og:locale:alternate" content="${langue === 'en' ? 'fr_FR' : 'en_GB'}" />
+    <meta property="og:site_name" content="${echappe(langue === 'en' ? `Apps by ${compte}` : `Les applications de ${compte}`)}" />
     <meta property="og:title" content="${echappe(titre)}" />
     <meta property="og:description" content="${echappe(descriptionPage)}" />
     <meta property="og:url" content="${url}" />
