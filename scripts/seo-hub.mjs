@@ -168,6 +168,31 @@ ${corps}
 }
 
 /**
+ * LE PLAN DE SITE EN TEXTE, publié à `/sitemap.txt` : une URL absolue par
+ * ligne, en UTF-8, comme l'admet le protocole. Il double l'index XML pour les
+ * moteurs qui refusent de relire celui-ci (Search Console affichait
+ * « Impossible de récupérer » sur des plans XML pourtant valides) ; il n'est pas
+ * nommé au robots.txt, il se soumet à la main. Seules les URL `http(s)` sous
+ * l'origine donnée sont gardées, sans doublon, dans l'ordre reçu ; le protocole
+ * plafonne un plan à 50 000 URL.
+ *
+ * @param {string[]} urls
+ * @param {string} origine
+ */
+export function planTexte(urls, origine) {
+  const vues = new Set();
+  for (const brute of urls) {
+    const url = String(brute ?? '').trim();
+    if (!/^https?:\/\/[^\s]+$/.test(url)) continue;
+    if (url !== origine && !url.startsWith(`${origine}/`)) continue;
+    vues.add(url);
+  }
+  const lignes = [...vues];
+  if (lignes.length > 50000) throw new Error(`sitemap.txt : ${lignes.length} URL, plus que les 50 000 admises`);
+  return lignes.length ? `${lignes.join('\n')}\n` : '';
+}
+
+/**
  * Les `<url>` d'un plan de site : adresse et `lastmod`, décodés.
  * @returns {{ loc: string, lastmod: string | null }[]}
  */

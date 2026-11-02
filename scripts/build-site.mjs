@@ -89,6 +89,7 @@ import {
   indexDePlans,
   lireEtatEnLigne,
   planDeSite,
+  planTexte,
   robotsTxt,
 } from './seo-hub.mjs';
 
@@ -560,6 +561,17 @@ const indexPlans = indexDePlans([
   })),
 ]);
 
+// Le même parc, en texte : les pages du hub, puis l'accueil et les pages de
+// contenu de chaque site qui publie un plan.
+const planTxt = planTexte(
+  [
+    ...pagesDuPlan.map(p => `${FAMILY_ORIGIN}${p.chemin}`),
+    ...plansDuParc.map(s => s.base),
+    ...[...pagesParApp.values(), ...pagesParSite.values()].flat().map(p => p.url),
+  ].sort((x, y) => x.localeCompare(y, 'fr')),
+  FAMILY_ORIGIN
+);
+
 /** Les pages, datées : le jeton cède la place au jour de leur dernier changement. */
 const pagesDatees = pagesDuPlan.map(p => ({ ...p, texte: dater(p.texte, lastmodDe(p.chemin)) }));
 
@@ -613,6 +625,8 @@ for (const [theme, fichier] of Object.entries(FICHIERS_DU_CIEL)) {
 // `/sitemap.xml` est l'INDEX ; les URL du hub sont dans `/sitemap-hub.xml`.
 writeFileSync(join(SORTIE, 'sitemap.xml'), indexPlans, 'utf8');
 writeFileSync(join(SORTIE, 'sitemap-hub.xml'), planHub, 'utf8');
+// Le même parc, une URL par ligne : à soumettre à la main si le XML coince.
+writeFileSync(join(SORTIE, 'sitemap.txt'), planTxt, 'utf8');
 // Relu en ligne à la construction suivante : c'est lui qui garde les dates.
 writeFileSync(join(SORTIE, 'seo-state.json'), JSON.stringify(etatSeo, null, 2) + '\n', 'utf8');
 // Le contenu exact que Google attend, au caractère près.

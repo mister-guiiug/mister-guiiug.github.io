@@ -15,6 +15,7 @@ import {
   jourAffiche,
   lireEtatEnLigne,
   planDeSite,
+  planTexte,
   robotsTxt,
   urlsDuPlan,
 } from '../scripts/seo-hub.mjs';
@@ -141,6 +142,31 @@ test('l’index des plans de site : un sitemapindex, échappé, lastmod facultat
   assert.equal((xml.match(/<lastmod>/g) ?? []).length, 1);
   assert.match(xml, /<loc>https:\/\/mister-guiiug\.github\.io\/a&amp;b\/sitemap\.xml<\/loc>/);
   assert.doesNotMatch(xml, /<urlset/);
+});
+
+test('le plan en texte : une URL par ligne, sous l’origine, sans doublon', () => {
+  const txt = planTexte(
+    [
+      ACCUEIL,
+      A_PROPOS,
+      `${ORIGINE}/miss-dice/`,
+      `${ORIGINE}/miss-dice/regles-du-yahtzee.html`,
+      `${ORIGINE}/miss-dice/`,
+      'https://example.org/ailleurs.html',
+      'javascript:alert(1)',
+      `${ORIGINE}/avec espace.html`,
+      '',
+      undefined,
+    ],
+    ORIGINE
+  );
+  assert.equal(
+    txt,
+    [ACCUEIL, A_PROPOS, `${ORIGINE}/miss-dice/`, `${ORIGINE}/miss-dice/regles-du-yahtzee.html`].join('\n') + '\n'
+  );
+  assert.doesNotMatch(txt, /<|\r/);
+  assert.equal(planTexte([], ORIGINE), '');
+  assert.equal(planTexte([`${ORIGINE}-faux/`], ORIGINE), '');
 });
 
 test('le plan du hub : lastmod seul, relu à l’identique', () => {
