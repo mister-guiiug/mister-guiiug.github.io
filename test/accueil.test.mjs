@@ -118,6 +118,17 @@ test('accueil : un h1 qui dit ce qu’est la page, la marque restant visible', (
   for (const { texte } of pages) assert.match(texte, /<p class="marque">GuiiuG<\/p>/);
 });
 
+test('accueil : chaque page nomme le site dans son Open Graph, dans sa langue', () => {
+  const { pages } = rendreAccueil(donnees());
+  const nom = chemin =>
+    /<meta property="og:site_name" content="([^"]*)" \/>/.exec(pages.find(p => p.chemin === chemin).texte)?.[1];
+  assert.equal(nom('/'), 'Les applications de exemple');
+  assert.equal(nom('/guides.html'), 'Les applications de exemple');
+  assert.equal(nom('/en/'), 'Apps by exemple');
+  assert.equal(nom('/en/guides.html'), 'Apps by exemple');
+  for (const { texte } of pages) assert.equal((texte.match(/og:site_name/g) ?? []).length, 1);
+});
+
 test('accueil : la langue par deux liens, le thème par un groupe de boutons', () => {
   const { pages } = rendreAccueil(donnees());
   for (const { chemin, langue, texte } of pages) {

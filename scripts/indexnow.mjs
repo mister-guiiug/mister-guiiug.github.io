@@ -75,11 +75,15 @@ async function attendre200(url, { essais = 24, pauseMs = 10_000 } = {}) {
   return false;
 }
 
-/** Une page du HUB : sur l'origine, et au premier niveau (`/`, `/a-propos.html`). */
+/**
+ * Une page du HUB : sur l'origine, au premier niveau (`/`, `/a-propos.html`)
+ * ou sous `/en/` (`/en/`, `/en/guides.html`). Les apps vivent dans leur propre
+ * dossier et se signalent elles-mêmes.
+ */
 const estDuHub = u => {
   try {
     const { origin, pathname } = new URL(u);
-    return origin === ORIGINE && /^\/[^/]*$/.test(pathname);
+    return origin === ORIGINE && /^\/(en\/)?[^/]*$/.test(pathname);
   } catch {
     return false;
   }
@@ -143,8 +147,12 @@ if (!aSignaler.length) {
     } else if (aBlanc) {
       console.log('(à blanc : rien envoyé)');
     } else {
-      // 3. Un seul envoi groupé (jusqu'à 10 000 URL).
-      const r = await fetch('https://api.indexnow.org/indexnow', {
+      // 3. Un envoi groupé (jusqu'à 10 000 URL), à DEUX points d'entrée.
+      //    Le relais api.indexnow.org perdait des envois quand plusieurs sites
+      //    de l'origine signalaient à quelques secondes d'écart : seul l'un
+      //    d'eux arrivait chez Bing. Bing reçoit donc aussi l'envoi en direct ;
+      //    un doublon est sans effet. Les réponses sortent en annotations.
+      const options = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({
@@ -153,10 +161,25 @@ if (!aSignaler.length) {
           keyLocation: CLE_URL,
           urlList: liste,
         }),
-      });
-      // 200 : reçu ; 202 : reçu, clé en cours de vérification (premier envoi).
-      console.log(`IndexNow : HTTP ${r.status} ${await r.text()}`);
-      if (r.status !== 200 && r.status !== 202) process.exitCode = 1;
+      };
+      const points = ['https://api.indexnow.org/indexnow', 'https://www.bing.com/indexnow'];
+      console.log(`::notice::IndexNow : ${liste.length} URL envoyées : ${liste.join(' ')}`);
+      let accepte = 0;
+      for (const point of points) {
+        const nom = new URL(point).host;
+        try {
+          const r = await fetch(point, options);
+          const corps = (await r.text()).replace(/\s+/g, ' ').slice(0, 200);
+          // 200 : reçu ; 202 : reçu, clé en cours de vérification (premier envoi).
+          console.log(`::notice::IndexNow (${nom}) : HTTP ${r.status}${corps ? ` ${corps}` : ''}`);
+          if (r.status === 200 || r.status === 202) accepte += 1;
+          else console.log(`::warning::IndexNow (${nom}) a répondu ${r.status}.`);
+        } catch (e) {
+          console.log(`::warning::IndexNow (${nom}) injoignable : ${e.message}`);
+        }
+      }
+      // Échec seulement si aucun des deux n'a accepté.
+      if (!accepte) process.exitCode = 1;
     }
   }
 }
