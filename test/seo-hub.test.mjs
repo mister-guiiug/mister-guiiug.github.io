@@ -293,7 +293,8 @@ test('MOTIF_ROBOT reconnaît les robots, et pas les navigateurs', () => {
 
 test('robots.txt nomme llms.txt en commentaire, jamais en directive', () => {
   const txt = robotsTxt({ origine: ORIGINE });
-  assert.match(txt, new RegExp(`^# .*${ORIGINE.replace(/[.]/g, '\.')}/llms\.txt`, 'm'));
+  const commentaires = txt.split('\n').filter(l => l.startsWith('#'));
+  assert.ok(commentaires.some(l => l.includes(`${ORIGINE}/llms.txt`)));
   // Aucune ligne non commentée ne le cite : robots.txt n'a pas de directive
   // pour ce fichier, et un validateur signalerait une ligne inconnue.
   assert.ok(!txt.replace(/#.*$/gm, '').includes('llms'));
