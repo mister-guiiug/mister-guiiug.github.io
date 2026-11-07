@@ -162,7 +162,7 @@ la relie à l'origine.
 
 **Rien n'est commité.** Le workflow [`pages.yml`](.github/workflows/pages.yml)
 engendre la page et ses fichiers (`index.html`, `a-propos.html`,
-`mister-quota.html`, `404.html`, `robots.txt`, `sitemap.xml`,
+`mister-quota.html`, `404.html`, `robots.txt`, `llms.txt`, `sitemap.xml`,
 `sitemap-hub.xml`, `seo-state.json`, manifeste, service worker, page hors
 ligne, vérifications Google et Bing, clé IndexNow, miniatures, icônes, et
 `command.js` avec `hub-command.js` quand le socle publie le raccourci) au
@@ -177,6 +177,12 @@ construit sans publier.
 - `robots.txt` autorise tout, à tous, et l'écrit robot par robot : moteurs de
   recherche et de réponse d'un côté, robots d'entraînement de l'autre. Il ne
   déclare qu'un plan de site, l'index.
+- `/llms.txt` est le catalogue en Markdown, au format de
+  [llmstxt.org](https://llmstxt.org) : une section par catégorie, une ligne par
+  application (nom, adresse, description française puis anglaise), tirée de
+  `FAMILY_APPS` comme l'accueil. `robots.txt` le nomme en **commentaire** :
+  la convention ne définit aucune directive, et une ligne inconnue serait
+  signalée par les validateurs. Il reste hors du worker, comme `robots.txt`.
 - `/sitemap.xml` est un **index** : il nomme `/sitemap-hub.xml` (les pages du
   hub) et le plan de chaque site publié sous l'origine.
 - Le `lastmod` d'une page du hub vient de l'**empreinte de son contenu**, date
