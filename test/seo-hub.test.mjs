@@ -14,6 +14,7 @@ import {
   indexDePlans,
   jourAffiche,
   lireEtatEnLigne,
+  llmsTxt,
   planDeSite,
   planTexte,
   robotsTxt,
@@ -288,4 +289,104 @@ test('MOTIF_ROBOT reconnaît les robots, et pas les navigateurs', () => {
     'Mozilla/5.0 (Linux; Android 12; KINGKONG 7 Build/SP1A.210812.016) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36',
   ];
   for (const ua of navigateurs) assert.ok(!MOTIF_ROBOT.test(ua), `navigateur pris pour un robot : ${ua}`);
+});
+
+test('robots.txt nomme llms.txt en commentaire, jamais en directive', () => {
+  const txt = robotsTxt({ origine: ORIGINE });
+  const commentaires = txt.split('\n').filter(l => l.startsWith('#'));
+  assert.ok(commentaires.some(l => l.includes(`${ORIGINE}/llms.txt`)));
+  // Aucune ligne non commentée ne le cite : robots.txt n'a pas de directive
+  // pour ce fichier, et un validateur signalerait une ligne inconnue.
+  assert.ok(!txt.replace(/#.*$/gm, '').includes('llms'));
+});
+
+// ---------------------------------------------------------------------------
+// llms.txt
+// ---------------------------------------------------------------------------
+
+const DONNEES_LLMS = {
+  titre: 'Les applications de mister-guiiug',
+  resume: 'Des PWA gratuites,\n  installables sans magasin.',
+  resumeEn: 'Free PWAs, installable without an app store.',
+  sections: [
+    {
+      titre: 'Jeux',
+      titreEn: 'Games',
+      apps: [
+        {
+          nom: 'Miss [Dice]',
+          url: `${ORIGINE}/miss-dice/`,
+          description: 'Lancer des dés,\nhors ligne.',
+          descriptionEn: 'Roll dice, offline.',
+        },
+        { nom: 'Mister Molkky', url: `${ORIGINE}/mister-molkky/`, description: 'Compter les points.' },
+      ],
+    },
+    // Une catégorie vide ne laisse pas de titre orphelin.
+    { titre: 'Santé', titreEn: 'Health', apps: [] },
+    {
+      titre: 'Outils',
+      titreEn: 'Outils',
+      apps: [{ nom: 'Mister Quota', url: `${ORIGINE}/mister-quota.html`, description: 'Une app de bureau.' }],
+    },
+  ],
+  optionnel: [{ titre: 'À propos', url: `${ORIGINE}/a-propos.html`, note: 'qui publie' }],
+};
+
+test('llms.txt : titre, résumé en citation, une section par catégorie, une ligne par app', () => {
+  const txt = llmsTxt(DONNEES_LLMS);
+  const lignes = txt.split('\n');
+  assert.equal(lignes[0], '# Les applications de mister-guiiug');
+  // Le résumé tient sur UNE ligne de citation, retours à la ligne repliés.
+  assert.ok(lignes.includes('> Des PWA gratuites, installables sans magasin.'));
+  assert.ok(lignes.includes('In English: Free PWAs, installable without an app store.'));
+  assert.deepEqual(
+    lignes.filter(l => l.startsWith('## ')),
+    ['## Jeux (Games)', '## Outils', '## Optional']
+  );
+  // Le format de llmstxt.org : - [nom](adresse): note. Crochets du nom
+  // échappés, description sur une ligne, l'anglaise après la française.
+  assert.ok(
+    lignes.includes(
+      String.raw`- [Miss \[Dice\]](` +
+        `${ORIGINE}/miss-dice/): Lancer des dés, hors ligne. — EN: Roll dice, offline.`
+    ),
+    txt
+  );
+  // Sans description anglaise, pas de « EN: » vide.
+  assert.ok(lignes.includes(`- [Mister Molkky](${ORIGINE}/mister-molkky/): Compter les points.`));
+  assert.ok(lignes.includes(`- [À propos](${ORIGINE}/a-propos.html): qui publie`));
+  assert.ok(txt.endsWith('\n') && !txt.endsWith('\n\n'));
+});
+
+test('llms.txt : une adresse avec espace ou parenthèse ne coupe pas le lien', () => {
+  const txt = llmsTxt({
+    titre: 'T',
+    resume: 'R',
+    sections: [{ titre: 'Jeux', apps: [{ nom: 'X', url: `${ORIGINE}/x (y)/` }] }],
+  });
+  assert.match(txt, /^- \[X\]\(https:\/\/mister-guiiug\.github\.io\/x%20%28y%29\/\)$/m);
+  // Ni résumé anglais ni section facultative : rien de vide n'est écrit.
+  assert.doesNotMatch(txt, /In English|## Optional/);
+});
+
+test('llms.txt du hub : chaque application du catalogue factice, à son adresse', async () => {
+  const { APPS, LIBELLES_FR, LIBELLES_EN } = await import('./catalogue-factice.mjs');
+  const txt = llmsTxt({
+    titre: 'T',
+    resume: 'R',
+    sections: ['jeux', 'outils'].map(cat => ({
+      titre: LIBELLES_FR.categories[cat],
+      titreEn: LIBELLES_EN.categories[cat],
+      apps: APPS.filter(a => a.category === cat).map(a => ({
+        nom: a.name,
+        url: a.appUrl,
+        description: a.description,
+        descriptionEn: a.descriptionEn,
+      })),
+    })),
+  });
+  for (const app of APPS) assert.ok(txt.includes(app.description.replace(/\s+/g, ' ')), app.id);
+  // Le Markdown n'interprète pas le HTML d'un nom piégé comme un lien de plus.
+  assert.equal((txt.match(/^- \[/gm) ?? []).length, APPS.length);
 });

@@ -1,6 +1,6 @@
 /**
  * Construit le site de la racine — `index.html`, les pages statiques
- * (`a-propos.html`, `mister-quota.html`, `404.html`), `robots.txt`, l'index des
+ * (`a-propos.html`, `mister-quota.html`, `404.html`), `robots.txt`, `llms.txt`, l'index des
  * plans de site (`sitemap.xml`) et celui du hub (`sitemap-hub.xml`),
  * `seo-state.json`, le service worker et les fichiers de vérification — dans un
  * dossier de sortie (`_site` par défaut). Rien n'est commité : le workflow
@@ -65,7 +65,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { appsSansDescriptionEn, rendreAccueil } from './accueil.mjs';
+import { ADRESSES, appsSansDescriptionEn, rendreAccueil } from './accueil.mjs';
 import { collecter, lireOctets } from './collecte.mjs';
 import { adresseApercu, versApercu } from './apercu.mjs';
 import { JETON_CSP, poserPolitique } from './csp.mjs';
@@ -88,6 +88,7 @@ import {
   empreinte,
   indexDePlans,
   lireEtatEnLigne,
+  llmsTxt,
   planDeSite,
   planTexte,
   robotsTxt,
@@ -357,7 +358,7 @@ for (const [nom, m] of [
  * `/previews/…`, auxquels son worker réponde. Tout ce qui est sous `/<app>/`
  * appartient à une app, qui a son propre worker. `robots.txt`, les plans de
  * site, `seo-state.json` et les fichiers de vérification restent hors liste :
- * ils servent aux robots, pas aux pages.
+ * ils servent aux robots, pas aux pages. `llms.txt` aussi.
  */
 const CHEMINS_DU_HUB = [
   '/',
@@ -502,6 +503,57 @@ const html404 = page404({
 });
 
 // ---------------------------------------------------------------------------
+// llms.txt — le catalogue en Markdown, pour les modèles de langue
+// ---------------------------------------------------------------------------
+
+/**
+ * Tiré de `FAMILY_APPS`, comme l'accueil : mêmes noms, mêmes descriptions,
+ * mêmes adresses (la page du hub pour une app de bureau). Une catégorie
+ * absente de `CATEGORIES` garde sa section, à la fin : une app ne disparaît
+ * pas du fichier faute de libellé.
+ */
+const categoriesDuLlms = [
+  ...CATEGORIES,
+  ...new Set(FAMILY_APPS.map(a => a.category).filter(c => !CATEGORIES.includes(c))),
+];
+const llms = llmsTxt({
+  titre: `Les applications de ${COMPTE}`,
+  resume:
+    `Les applications web de ${COMPTE} : des PWA gratuites et open source, qui s'ouvrent dans le navigateur et s'installent sans passer par un magasin d'applications. Une ligne par application : son nom, son adresse, ce qu'elle fait.`,
+  resumeEn: `${COMPTE}'s web apps: free, open-source PWAs that open in the browser and install without an app store. One line per app: its name, its address, what it does.`,
+  sections: categoriesDuLlms.map(cat => ({
+    titre: libellesFr.categories?.[cat] ?? cat,
+    titreEn: libellesEn.categories?.[cat] ?? '',
+    apps: FAMILY_APPS.filter(a => a.category === cat)
+      .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+      .map(a => ({
+        nom: a.name,
+        url: adresseDe(a),
+        description: a.description,
+        descriptionEn: a.descriptionEn,
+      })),
+  })),
+  optionnel: [
+    {
+      titre: 'Guides',
+      url: `${FAMILY_ORIGIN}${ADRESSES.guides.fr}`,
+      note: 'les guides de toutes les applications, en français et en anglais',
+    },
+    { titre: 'Guides (English)', url: `${FAMILY_ORIGIN}${ADRESSES.guides.en}` },
+    {
+      titre: 'À propos',
+      url: `${FAMILY_ORIGIN}/a-propos.html`,
+      note: 'qui publie ces applications, et ce que chacune fait de vos données',
+    },
+    {
+      titre: 'Toutes les URL du parc',
+      url: `${FAMILY_ORIGIN}/sitemap.txt`,
+      note: 'une URL par ligne : le hub, chaque application et ses pages de contenu',
+    },
+  ],
+});
+
+// ---------------------------------------------------------------------------
 // Dates de modification — l'empreinte du contenu, pas le jour du build
 // ---------------------------------------------------------------------------
 
@@ -608,6 +660,8 @@ for (const { fichier, texte } of pagesDatees) writeFileSync(join(SORTIE, fichier
 writeFileSync(join(SORTIE, '404.html'), html404, 'utf8');
 writeFileSync(join(SORTIE, 'offline.html'), offlineHtml, 'utf8');
 writeFileSync(join(SORTIE, 'robots.txt'), robots, 'utf8');
+// Hors du worker comme robots.txt : il sert aux robots, pas aux pages.
+writeFileSync(join(SORTIE, 'llms.txt'), llms, 'utf8');
 writeFileSync(
   join(SORTIE, 'manifest.webmanifest'),
   JSON.stringify(manifeste, null, 2) + '\n',
@@ -690,7 +744,7 @@ console.log(
     `${pagesDuPlan
       .filter(p => p.fichier !== 'index.html')
       .map(p => p.fichier)
-      .join(', ')}, 404.html, robots.txt, sitemap.xml (index de ` +
+      .join(', ')}, 404.html, robots.txt, llms.txt, sitemap.xml (index de ` +
     `${plansDuParc.length + 1} plans), sitemap-hub.xml (${pagesDuPlan.length} URL), seo-state.json, ` +
     `${VERIFICATION_GOOGLE}, BingSiteAuth.xml, clé IndexNow, og-image.jpg, ` +
     `previews/ (${apercus.size}), offline.html, manifest.webmanifest, sw.js, icônes PWA`

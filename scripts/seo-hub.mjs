@@ -290,7 +290,76 @@ Allow: /
 # Un seul plan de site : un INDEX, qui nomme celui du hub et celui de chaque
 # site publié sous l'origine.
 Sitemap: ${origine}/sitemap.xml
+
+# Pour les modèles de langue, la liste des applications en Markdown :
+# ${origine}/llms.txt (format https://llmstxt.org).
+# Un commentaire et non une directive : robots.txt n'en définit aucune
+# pour ce fichier.
 `;
+}
+
+// ---------------------------------------------------------------------------
+// llms.txt
+// ---------------------------------------------------------------------------
+
+/** Une ligne de Markdown : espaces repliés. */
+const ligneMd = texte => String(texte ?? '').replace(/\s+/g, ' ').trim();
+/** Le texte d'un lien Markdown : crochets et barre oblique inverse échappés. */
+const texteDeLien = texte => ligneMd(texte).replace(/([[\]\\])/g, '\\$1');
+/**
+ * L'adresse d'un lien Markdown : ni espace ni parenthèse ne la coupent.
+ * `encodeURIComponent` laisse passer les parenthèses : elles sont codées à part.
+ */
+const CODES_ADRESSE = { ' ': '%20', '(': '%28', ')': '%29' };
+const adresseDeLien = url => ligneMd(url).replace(/[ ()]/g, c => CODES_ADRESSE[c]);
+
+/**
+ * LE `llms.txt` DE L'ORIGINE, au format de https://llmstxt.org : un titre, un
+ * résumé en citation, puis des sections de liens Markdown
+ * `- [nom](adresse): description`.
+ *
+ * Proposé par les audits SEO/GEO du 28/09 et du 06/11/2026 : la racine
+ * répondait 404, comme les vingt-trois sites. La convention est inégalement
+ * lue, Google ne s'en sert pas ; mais un agent qui la lit trouve ici, en une
+ * requête, ce que chaque application fait et où elle est.
+ *
+ * Une section par catégorie, dans l'ordre du catalogue ; une ligne par
+ * application : la description française, puis l'anglaise quand le catalogue
+ * l'a. `optionnel` devient la section `## Optional`, que la convention dit
+ * dispensable quand le contexte manque.
+ *
+ * @param {{
+ *   titre: string,
+ *   resume: string,
+ *   resumeEn?: string,
+ *   sections: { titre: string, titreEn?: string,
+ *     apps: { nom: string, url: string, description?: string, descriptionEn?: string }[] }[],
+ *   optionnel?: { titre: string, url: string, note?: string }[],
+ * }} donnees
+ */
+export function llmsTxt({ titre, resume, resumeEn, sections, optionnel = [] }) {
+  const lignes = [`# ${ligneMd(titre)}`, '', `> ${ligneMd(resume)}`];
+  if (resumeEn) lignes.push('', `In English: ${ligneMd(resumeEn)}`);
+  for (const section of sections) {
+    if (!section.apps.length) continue;
+    const titreEn = ligneMd(section.titreEn);
+    const titreFr = ligneMd(section.titre);
+    lignes.push('', `## ${titreEn && titreEn !== titreFr ? `${titreFr} (${titreEn})` : titreFr}`, '');
+    for (const app of section.apps) {
+      const fr = ligneMd(app.description);
+      const en = ligneMd(app.descriptionEn);
+      const note = [fr, en && en !== fr ? `EN: ${en}` : ''].filter(Boolean).join(' — ');
+      lignes.push(`- [${texteDeLien(app.nom)}](${adresseDeLien(app.url)})${note ? `: ${note}` : ''}`);
+    }
+  }
+  if (optionnel.length) {
+    lignes.push('', '## Optional', '');
+    for (const lien of optionnel) {
+      const note = ligneMd(lien.note);
+      lignes.push(`- [${texteDeLien(lien.titre)}](${adresseDeLien(lien.url)})${note ? `: ${note}` : ''}`);
+    }
+  }
+  return `${lignes.join('\n')}\n`;
 }
 
 // ---------------------------------------------------------------------------
