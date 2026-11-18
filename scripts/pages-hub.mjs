@@ -408,6 +408,7 @@ ${fil
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="referrer" content="origin" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'" />
     <title>${echappeHtml(titre)}</title>
     <meta name="description" content="${echappeHtml(description)}" />${meta}

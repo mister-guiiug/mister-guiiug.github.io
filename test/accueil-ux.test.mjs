@@ -28,7 +28,12 @@ test('liens : aucun target=_blank servi ; ceux de la famille sont marqués pour 
   const famille = liens.filter(l => /data-hors-shell/.test(l));
   // Ouvrir et la carte de chaque app web, le guide et son app, la carte des coulisses.
   assert.ok(famille.length >= 6, `${famille.length} liens de la famille marqués`);
-  for (const l of famille) assert.match(l, /rel="noreferrer"/, l);
+  // L'app apprend qu'on vient du hub (son origine), jamais la page ni la recherche.
+  for (const l of famille) {
+    assert.match(l, /referrerpolicy="origin"/, l);
+    assert.doesNotMatch(l, /noreferrer/, l);
+  }
+  assert.ok(html.includes('<meta name="referrer" content="origin" />'), 'la page n’envoie que son origine');
   // Les liens externes (GitHub, Buy Me a Coffee) ne sont pas marqués.
   for (const l of liens.filter(l => /github\.com|buymeacoffee/.test(l))) {
     assert.doesNotMatch(l, /data-hors-shell/, l);

@@ -26,7 +26,7 @@ export const LANGUES = ['fr', 'en'];
  * installé (le script y pose target=_blank). Celui qu'écrit aussi accueil.mjs.
  */
 const lien = (url, texte, attrs = '') =>
-  `<a href="${echappe(url)}" rel="noreferrer" data-hors-shell${attrs}>${texte}</a>`;
+  `<a href="${echappe(url)}" referrerpolicy="origin" data-hors-shell${attrs}>${texte}</a>`;
 
 /** Les attributs d'une balise, quel que soit leur ordre. */
 const attributsDe = balise =>

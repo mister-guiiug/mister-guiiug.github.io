@@ -134,11 +134,18 @@ const maturite = (libellesFr, m) =>
  * nouvel onglet sans le dire. Seul le hub INSTALLÉ a besoin d'en sortir, pour
  * que chaque app reste installable à part : le script y pose `target=_blank`
  * sur les liens marqués `data-hors-shell`, et le dit pour l'oreille (voir
- * hub-client.js). `rel="noreferrer"` garde le comportement d'avant : l'app
- * ouverte ne reçoit pas l'adresse du catalogue, recherche comprise.
+ * hub-client.js).
+ *
+ * L'APP SAIT QU'ON VIENT DU HUB, ET RIEN DE PLUS. `referrerpolicy="origin"` ne
+ * transmet que `https://mister-guiiug.github.io/` : ni la page du hub, ni la
+ * recherche tapée (`?q=`). Jusqu'au 19/11/2026, ces liens portaient
+ * `rel="noreferrer"` : aucune adresse ne partait, et la mesure des apps comptait
+ * chaque arrivée par le hub comme un accès direct. La balise
+ * `<meta name="referrer" content="origin">` de la page couvre le reste, dont
+ * le bouton « Au hasard » du hub installé (`window.open`).
  */
 const lienHorsShell = (url, texte, attrs = '') =>
-  `<a href="${echappe(url)}" rel="noreferrer" data-hors-shell${attrs}>${texte}</a>`;
+  `<a href="${echappe(url)}" referrerpolicy="origin" data-hors-shell${attrs}>${texte}</a>`;
 
 /**
  * La vignette d'une app : la miniature de son image de partage. Son `alt` la
@@ -941,6 +948,7 @@ function teteHtml(ctx) {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="referrer" content="origin" />
     <meta http-equiv="Content-Security-Policy" content="${JETON_CSP}" />
     <title>${echappe(titre)}</title>
     <meta name="description" content="${echappe(descriptionPage)}" />

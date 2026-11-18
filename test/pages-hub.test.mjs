@@ -88,6 +88,8 @@ test('À propos : page statique, indexable, JSON-LD AboutPage relié à #org et 
   assert.match(html, new RegExp(`<link rel="canonical" href="${re(ORIGINE)}/a-propos\\.html" />`));
   assert.match(html, /<meta name="robots" content="index, follow" \/>/);
   assert.match(html, /<meta property="og:locale" content="fr_FR" \/>/);
+  // Une app ouverte d'ici apprend qu'on vient du hub, pas de quelle page.
+  assert.match(html, /<meta name="referrer" content="origin" \/>/);
   const t = decode(titre(html));
   const d = decode(description(html));
   assert.ok(t.length >= 50 && t.length <= 70, `titre de ${t.length} caractères : ${t}`);
