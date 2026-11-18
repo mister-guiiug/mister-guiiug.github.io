@@ -72,11 +72,11 @@ test('activité : l’extrait dit le total, les dépôts et le relevé, dans la 
   const fr = activiteHtml(lue, { langue: 'fr', origine: ORIGINE });
   const en = activiteHtml(lue, { langue: 'en', origine: ORIGINE });
   const total = lue.contributions;
-  assert.match(fr, new RegExp(`<strong>${new Intl.NumberFormat('fr-FR').format(total)}</strong> contributions en 2026`));
+  assert.ok(fr.includes(`<strong>${new Intl.NumberFormat('fr-FR').format(total)}</strong> contributions en 2026`));
   assert.match(fr, /dans <strong>127<\/strong> dépôts/);
   assert.match(fr, /Relevé du 17 novembre 2026/);
   assert.match(fr, /au plus 1 047 le 12 septembre 2026/);
-  assert.match(en, new RegExp(`<strong>${new Intl.NumberFormat('en-GB').format(total)}</strong> contributions in 2026`));
+  assert.ok(en.includes(`<strong>${new Intl.NumberFormat('en-GB').format(total)}</strong> contributions in 2026`));
   assert.match(en, /across <strong>127<\/strong> repositories/);
   assert.match(en, /Counted on 17 November 2026/);
   for (const html of [fr, en]) {
