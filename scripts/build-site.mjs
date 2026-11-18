@@ -67,6 +67,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ADRESSES, appsSansDescriptionEn, rendreAccueil } from './accueil.mjs';
 import { collecter, lireOctets } from './collecte.mjs';
+import { JETON_ACTIVITE, activiteHtml } from './activite.mjs';
 import { adresseApercu, versApercu } from './apercu.mjs';
 import { JETON_CSP, poserPolitique } from './csp.mjs';
 import { FICHIERS_DU_CIEL, cielSvg } from './ciel.mjs';
@@ -179,6 +180,7 @@ const {
   pagesParSite,
   bureau,
   pageDeBureau,
+  activite,
 } = await collecter({ compte: COMPTE, socle: SOCLE, soi: SOI, jeton: JETON, strict });
 
 const surOrigine = url => url.startsWith(`${FAMILY_ORIGIN}/`);
@@ -616,8 +618,18 @@ const planTxt = planTexte(
   FAMILY_ORIGIN
 );
 
-/** Les pages, datées : le jeton cède la place au jour de leur dernier changement. */
-const pagesDatees = pagesDuPlan.map(p => ({ ...p, texte: dater(p.texte, lastmodDe(p.chemin)) }));
+/**
+ * Les pages, datées : le jeton cède la place au jour de leur dernier changement.
+ * L'accueil reçoit ensuite l'extrait de Mister Contrib, hors de son empreinte :
+ * le relevé quotidien ne change ni sa date ni ses signalements (activite.mjs).
+ */
+const pagesDatees = pagesDuPlan.map(p => ({
+  ...p,
+  texte: dater(p.texte, lastmodDe(p.chemin)).replaceAll(
+    JETON_ACTIVITE,
+    p.accueil ? activiteHtml(activite, { langue: p.langue, origine: FAMILY_ORIGIN }) : ''
+  ),
+}));
 
 /**
  * La politique de sécurité de l'accueil, posée sur la page DATÉE : ses
@@ -637,7 +649,7 @@ for (const p of pagesDatees) {
 }
 
 for (const { fichier, texte } of [...pagesDatees, { fichier: '404.html', texte: html404 }]) {
-  if (Object.values(JETONS).some(j => texte.includes(j))) {
+  if ([...Object.values(JETONS), JETON_ACTIVITE].some(j => texte.includes(j))) {
     throw new Error(`${fichier} : un jeton de date n'a pas été remplacé`);
   }
   if (texte.includes(JETON_CSP)) {

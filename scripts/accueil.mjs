@@ -14,6 +14,7 @@
  * élément `<script>`.
  */
 import { readFileSync } from 'node:fs';
+import { JETON_ACTIVITE } from './activite.mjs';
 import { JETON_CSP } from './csp.mjs';
 import { echappe } from './echappe.mjs';
 import { entreeGuide, lienGuideDeCarte, regrouperGuides } from './guides.mjs';
@@ -1081,6 +1082,7 @@ function enteteHtml(ctx) {
           <button type="button" class="chip" id="hasard" data-i18n="hasard">Au hasard</button>
           <button type="button" class="installer" id="installer" data-i18n="installer" hidden>Installer le catalogue</button>
         </p>
+        ${JETON_ACTIVITE}
       </div>
 ${constellation}
 ${featuredHtml}`
