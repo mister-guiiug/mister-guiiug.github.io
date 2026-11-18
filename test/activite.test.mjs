@@ -80,7 +80,7 @@ test('activité : l’extrait dit le total, les dépôts et le relevé, dans la 
   assert.match(en, /across <strong>127<\/strong> repositories/);
   assert.match(en, /Counted on 17 November 2026/);
   for (const html of [fr, en]) {
-    assert.match(html, new RegExp(`<a href="${ORIGINE}/mister-contrib/">`));
+    assert.ok(html.includes(`<a href="${ORIGINE}/mister-contrib/">`), 'lien vers le calendrier complet');
     assert.match(html, /<svg class="activite-grille" viewBox="0 0 335 118" role="img" aria-label="[^"]+">/);
     // La politique de l'accueil refuse les attributs style : des classes seulement.
     assert.doesNotMatch(html, /\sstyle=/);
