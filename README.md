@@ -49,6 +49,15 @@ L'API GitHub ne sert plus qu'à trouver la dernière version publiée du socle, 
   d'infrastructure y apparaît de lui-même ;
 - la dernière version publiée d'une application de bureau, pour sa page du hub.
 
+**Le haut de l'accueil montre un extrait de Mister Contrib** : le total des
+contributions de l'année, le nombre de dépôts, et les 26 dernières semaines en
+calendrier, avec un lien vers le calendrier complet. Il est lu dans
+`/mister-contrib/donnees.json` et rendu en SVG à la construction : ni script ni
+requête chez le visiteur (`scripts/activite.mjs`). Il est posé APRÈS le calcul
+de l'empreinte de la page : le relevé quotidien ne change ni la date « Mis à
+jour le » ni les signalements IndexNow. Fichier illisible : l'accueil paraît
+sans lui.
+
 Chaque carte d'application porte aussi un lien « Guide » vers sa première
 **page de contenu** en français (socle 6.17.0 : `content/pages/<slug>.md` →
 `<slug>.html`), lue dans le plan de site de l'app, avec son titre en infobulle.

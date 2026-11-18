@@ -17,6 +17,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CHEMIN_DONNEES, lireActivite } from './activite.mjs';
 import { alternatesDe } from './guides.mjs';
 import { PAGES_BUREAU } from './pages-hub.mjs';
 import { dernierLastmod, urlsDuPlan } from './seo-hub.mjs';
@@ -487,6 +488,23 @@ export async function collecter({ compte, socle, soi, jeton, strict }) {
   }
   const pageDeBureau = new Map(bureau.map(b => [b.app.id, b]));
 
+  /**
+   * L'extrait de Mister Contrib (voir activite.mjs). Illisible ou mal formé :
+   * l'accueil paraît sans lui, la construction continue.
+   */
+  const texteActivite = await lire(`${FAMILY_ORIGIN}${CHEMIN_DONNEES}`);
+  let activite = null;
+  try {
+    activite = texteActivite ? lireActivite(JSON.parse(texteActivite)) : null;
+  } catch {
+    activite = null;
+  }
+  console.log(
+    activite
+      ? `  · activité : ${activite.contributions} contributions, relevé du ${activite.releve}`
+      : `::warning::${CHEMIN_DONNEES} illisible : l'accueil paraît sans l'extrait des contributions.`
+  );
+
   return {
     version,
     catalogue,
@@ -507,6 +525,7 @@ export async function collecter({ compte, socle, soi, jeton, strict }) {
     pagesParSite,
     bureau,
     pageDeBureau,
+    activite,
   };
 }
 

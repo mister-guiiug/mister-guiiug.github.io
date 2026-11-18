@@ -67,6 +67,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ADRESSES, appsSansDescriptionEn, rendreAccueil } from './accueil.mjs';
 import { collecter, lireOctets } from './collecte.mjs';
+import { JETON_ACTIVITE, activiteHtml } from './activite.mjs';
 import { adresseApercu, versApercu } from './apercu.mjs';
 import { JETON_CSP, poserPolitique } from './csp.mjs';
 import { FICHIERS_DU_CIEL, cielSvg } from './ciel.mjs';
@@ -74,7 +75,6 @@ import { serviceWorkerHub } from './hub-sw.mjs';
 import { manifesteHub, problemePorteeHub } from './manifeste-hub.mjs';
 import { INDEXNOW_CLE } from './indexnow-cle.mjs';
 import { appsNonRelevees, pageAPropos } from './page-a-propos.mjs';
-import { pageInstallerAndroid } from './page-installer-android.mjs';
 import {
   JETONS,
   PAGES_BUREAU,
@@ -180,6 +180,7 @@ const {
   pagesParSite,
   bureau,
   pageDeBureau,
+  activite,
 } = await collecter({ compte: COMPTE, socle: SOCLE, soi: SOI, jeton: JETON, strict });
 
 const surOrigine = url => url.startsWith(`${FAMILY_ORIGIN}/`);
@@ -372,7 +373,6 @@ const CHEMINS_DU_HUB = [
   '/offline.html',
   '/404.html',
   '/a-propos.html',
-  '/installer-android.html',
   ...bureau.map(b => b.chemin),
   '/manifest.webmanifest',
   '/og-image.jpg',
@@ -484,7 +484,6 @@ const aProposHtml = pageAPropos({
   avecIssues,
   sponsorUrl: SPONSOR_URL,
 });
-const installerAndroidHtml = pageInstallerAndroid(commun);
 // Une app née au catalogue après le relevé : la page la dit « pas encore
 // relevée » plutôt que de lui prêter des pratiques ; la CI le signale.
 const aRelever = appsNonRelevees(FAMILY_APPS);
@@ -567,11 +566,6 @@ const pagesDuPlan = [
   // la politique de l'accueil (script et styles en ligne, voir plus bas).
   ...pagesAccueil.map(p => ({ chemin: p.chemin, fichier: p.fichier, texte: p.texte, accueil: true, langue: p.langue })),
   { chemin: '/a-propos.html', fichier: 'a-propos.html', texte: aProposHtml },
-  {
-    chemin: '/installer-android.html',
-    fichier: 'installer-android.html',
-    texte: installerAndroidHtml,
-  },
   ...pagesBureauHtml.map(p => ({ chemin: p.chemin, fichier: p.chemin.slice(1), texte: p.texte })),
 ];
 const aujourdhui = new Date().toISOString().slice(0, 10);
@@ -624,8 +618,18 @@ const planTxt = planTexte(
   FAMILY_ORIGIN
 );
 
-/** Les pages, datées : le jeton cède la place au jour de leur dernier changement. */
-const pagesDatees = pagesDuPlan.map(p => ({ ...p, texte: dater(p.texte, lastmodDe(p.chemin)) }));
+/**
+ * Les pages, datées : le jeton cède la place au jour de leur dernier changement.
+ * L'accueil reçoit ensuite l'extrait de Mister Contrib, hors de son empreinte :
+ * le relevé quotidien ne change ni sa date ni ses signalements (activite.mjs).
+ */
+const pagesDatees = pagesDuPlan.map(p => ({
+  ...p,
+  texte: dater(p.texte, lastmodDe(p.chemin)).replaceAll(
+    JETON_ACTIVITE,
+    p.accueil ? activiteHtml(activite, { langue: p.langue, origine: FAMILY_ORIGIN }) : ''
+  ),
+}));
 
 /**
  * La politique de sécurité de l'accueil, posée sur la page DATÉE : ses
@@ -645,7 +649,7 @@ for (const p of pagesDatees) {
 }
 
 for (const { fichier, texte } of [...pagesDatees, { fichier: '404.html', texte: html404 }]) {
-  if (Object.values(JETONS).some(j => texte.includes(j))) {
+  if ([...Object.values(JETONS), JETON_ACTIVITE].some(j => texte.includes(j))) {
     throw new Error(`${fichier} : un jeton de date n'a pas été remplacé`);
   }
   if (texte.includes(JETON_CSP)) {
