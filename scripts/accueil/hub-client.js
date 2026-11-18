@@ -444,7 +444,8 @@
   if (hasardBtn && HASARD && HASARD.length) {
     hasardBtn.addEventListener('click', function () {
       var url = HASARD[Math.floor(Math.random() * HASARD.length)];
-      if (estInstallee()) window.open(url, '_blank', 'noopener,noreferrer');
+      // Pas de « noreferrer » : la page n'envoie que son origine (meta referrer).
+      if (estInstallee()) window.open(url, '_blank', 'noopener');
       else location.assign(url);
     });
   }
