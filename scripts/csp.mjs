@@ -61,7 +61,14 @@ export function politiqueAccueil(html, { origine, apercu = null, scripts = [], m
     "default-src 'none'",
     ['script-src', ...scriptsEnLigne(html).map(empreinte), ...scripts].join(' '),
     ['style-src', ...stylesEnLigne(html).map(empreinte)].join(' '),
-    ['img-src', origine, ...(apercu ? [`${apercu}/`] : [])].join(' '),
+    // Les icônes des extensions Firefox vivent sur le dépôt GitHub (pas de
+    // Pages) : raw.githubusercontent.com, limité au compte de la famille.
+    [
+      'img-src',
+      origine,
+      'https://raw.githubusercontent.com/mister-guiiug/',
+      ...(apercu ? [`${apercu}/`] : []),
+    ].join(' '),
     "connect-src 'none'",
     `worker-src ${hub}/sw.js`,
     `manifest-src ${hub}${manifeste}`,

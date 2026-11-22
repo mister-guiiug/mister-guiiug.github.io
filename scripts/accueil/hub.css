@@ -707,7 +707,8 @@ ul {
   background: var(--fond-carte);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.carte-bureau {
+.carte-bureau,
+.carte-extension {
   border-style: dashed;
   background:
     repeating-linear-gradient(

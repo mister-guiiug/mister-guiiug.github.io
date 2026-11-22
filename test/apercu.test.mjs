@@ -46,10 +46,20 @@ test('versApercu : les fichiers du hub, et eux seuls', () => {
 
 test('politique : en aperçu, worker et manifeste locaux, images des deux côtés', () => {
   const p = politiqueAccueil('<p></p>', { origine: ORIGINE, apercu: APERCU });
-  assert.match(p, new RegExp(`img-src ${re(ORIGINE)} ${re(APERCU)}/;`));
+  assert.match(
+    p,
+    new RegExp(
+      `img-src ${re(ORIGINE)} ${re('https://raw.githubusercontent.com/mister-guiiug/')} ${re(APERCU)}/;`
+    )
+  );
   assert.match(p, new RegExp(`worker-src ${re(APERCU)}/sw\\.js;`));
   assert.match(p, new RegExp(`manifest-src ${re(APERCU)}/manifest\\.webmanifest;`));
   const production = politiqueAccueil('<p></p>', { origine: ORIGINE });
-  assert.match(production, new RegExp(`img-src ${re(ORIGINE)};`));
+  assert.match(
+    production,
+    new RegExp(
+      `img-src ${re(ORIGINE)} ${re('https://raw.githubusercontent.com/mister-guiiug/')};`
+    )
+  );
   assert.match(production, new RegExp(`worker-src ${re(ORIGINE)}/sw\\.js;`));
 });

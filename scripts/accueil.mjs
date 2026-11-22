@@ -241,16 +241,19 @@ const carteApp = (ctx, app, featuredId) => {
     surOrigine,
   } = ctx;
   const bureau = app.platform === 'desktop';
+  const extension = app.platform === 'extension';
   const pages = pagesParApp.get(app.id) ?? [];
   const apercu = apercus.get(app.id);
-  const icone = iconeParApp.get(app.id) ?? null;
+  const icone = iconeParApp.get(app.id) ?? app.iconUrl ?? null;
   const horsLigne = surOrigine(app.appUrl) && enPanne.some(x => x.startsWith(`${app.id} (`));
   const lienGuide = lienGuideDeCarte(regrouperGuides(pages));
-  const plateforme = bureau ? 'desktop' : 'web';
+  const plateforme = app.platform === 'desktop' || app.platform === 'extension' ? app.platform : 'web';
   const aLaUne = featuredId && app.id === featuredId;
   const libelleOuvrir = pageDeBureau.has(app.id)
     ? '<span data-i18n="presentation">Présentation</span>'
-    : '<span data-i18n="ouvrir">Ouvrir</span>';
+    : extension
+      ? '<span data-i18n="modulesFirefox">Modules Firefox</span>'
+      : '<span data-i18n="ouvrir">Ouvrir</span>';
   const actions = `
             <p class="actions">
               ${lienPrincipal(ctx, app, libelleOuvrir, ' class="action action-ouvrir"')}
@@ -264,6 +267,7 @@ const carteApp = (ctx, app, featuredId) => {
     libellesEn.categories?.[app.category] ?? '',
     app.maturity,
     plateforme,
+    extension ? 'firefox extension' : '',
     // Chercher « yahtzee » trouve Miss Dice : le titre de ses guides en parle.
     ...pages.map(p => p.titre),
   ]
@@ -277,6 +281,9 @@ const carteApp = (ctx, app, featuredId) => {
   const badgeBureau = bureau
     ? ` <span class="badge" data-i18n="badgeDesktop">${echappe('Application de bureau')}</span>`
     : '';
+  const badgeExtension = extension
+    ? ` <span class="badge" data-i18n="badgeExtension">${echappe('Extension Firefox')}</span>`
+    : '';
   const badgeUne = aLaUne
     ? ` <span class="badge badge-une" data-i18n="aLaUne">${echappe('À la une')}</span>`
     : '';
@@ -286,6 +293,7 @@ const carteApp = (ctx, app, featuredId) => {
   const classes = [
     'carte',
     bureau ? 'carte-bureau' : '',
+    extension ? 'carte-extension' : '',
     aLaUne ? 'carte-une' : '',
     horsLigne ? 'carte-panne' : '',
   ]
@@ -297,7 +305,7 @@ const carteApp = (ctx, app, featuredId) => {
             ${lienPrincipal(ctx, app, '', ` class="carte-hit" tabindex="-1" aria-hidden="true"`)}
 ${visuel}
             <div class="corps">
-              <h3><span class="nom">${echappe(app.name)}</span>${maturite(libellesFr, app.maturity)}${badgeBureau}${badgeUne}${badgePanne}</h3>
+              <h3><span class="nom">${echappe(app.name)}</span>${maturite(libellesFr, app.maturity)}${badgeBureau}${badgeExtension}${badgeUne}${badgePanne}</h3>
               <p data-fr="${echappe(app.description)}" data-en="${echappe(app.descriptionEn)}">${echappe(app.description)}</p>${actions}
             </div>
           </li>`;
@@ -588,6 +596,8 @@ const libellesClient = ctx => {
       sponsorBefore: 'Ces applications sont gratuites et open source.',
       sponsorLink: "M'offrir un café",
       badgeDesktop: 'Application de bureau',
+      badgeExtension: 'Extension Firefox',
+      modulesFirefox: 'Modules Firefox',
       badgePanne: 'Non vérifiée',
       bandeauPanne:
         'Certaines applications du catalogue ne répondent pas pour le moment — leurs cartes restent listées, sans promesse d’ouverture.',
@@ -617,6 +627,7 @@ const libellesClient = ctx => {
       plateformeTous: 'Toutes',
       plateformeWeb: 'PWA',
       plateformeDesktop: 'Bureau',
+      plateformeExtension: 'Extension',
       triFiltre: 'Tri',
       triStable: 'Stables d’abord',
       triAz: 'A–Z',
@@ -669,6 +680,8 @@ const libellesClient = ctx => {
       sponsorBefore: 'These apps are free and open source.',
       sponsorLink: 'Buy me a coffee',
       badgeDesktop: 'Desktop app',
+      badgeExtension: 'Firefox extension',
+      modulesFirefox: 'Firefox Add-ons',
       badgePanne: 'Unverified',
       bandeauPanne:
         'Some catalog apps are unreachable right now — their cards stay listed, without promising they will open.',
@@ -698,6 +711,7 @@ const libellesClient = ctx => {
       plateformeTous: 'All',
       plateformeWeb: 'PWA',
       plateformeDesktop: 'Desktop',
+      plateformeExtension: 'Extension',
       triFiltre: 'Sort',
       triStable: 'Stable first',
       triAz: 'A–Z',
@@ -1232,6 +1246,7 @@ ${navCats}
             <button type="button" class="chip" data-platform-filter="" aria-pressed="true" data-i18n="plateformeTous">Toutes</button>
             <button type="button" class="chip" data-platform-filter="web" aria-pressed="false" data-i18n="plateformeWeb">PWA</button>
             <button type="button" class="chip" data-platform-filter="desktop" aria-pressed="false" data-i18n="plateformeDesktop">Bureau</button>
+            <button type="button" class="chip" data-platform-filter="extension" aria-pressed="false" data-i18n="plateformeExtension">Extension</button>
           </div>
           <div class="maturite tri" role="group" data-i18n-aria="triFiltre" aria-label="Tri">
             <span class="rail-label" aria-hidden="true" data-i18n="triFiltre">Tri</span>

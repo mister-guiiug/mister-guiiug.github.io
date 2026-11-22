@@ -72,7 +72,10 @@ test('CSP : styles par empreinte, aucun attribut style ni gestionnaire en ligne'
 test('CSP : tout le reste est fermé ou nommé', () => {
   const d = directives(publie(false));
   assert.deepEqual(d['default-src'], ["'none'"]);
-  assert.deepEqual(d['img-src'], [ORIGINE]);
+  assert.deepEqual(d['img-src'], [
+    ORIGINE,
+    'https://raw.githubusercontent.com/mister-guiiug/',
+  ]);
   assert.deepEqual(d['connect-src'], ["'none'"]);
   assert.deepEqual(d['worker-src'], [`${ORIGINE}/sw.js`]);
   assert.deepEqual(d['manifest-src'], [`${ORIGINE}/manifest.webmanifest`]);
