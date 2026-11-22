@@ -55,6 +55,7 @@ export const RELEVE = {
     firebase: ['miss-ticket-pwa', 'mister-puzzle', 'mister-qowa'],
     outils: ['miss-supaboss', 'miss-supatool'],
     bureau: ['mister-quota'],
+    extensions: ['mister-no-noise', 'mister-no-prices'],
   },
   /**
    * Un compte est nécessaire pour s'en servir : l'écran de connexion garde
@@ -227,7 +228,11 @@ export function pageAPropos({ origine, compte, imagePartage, apps, avecIssues, s
   const liens = ids => enumere(choisir(ids).map(lien));
   const noms = ids => enumere(choisir(ids).map(a => echappeHtml(a.name)));
   /** « Toutes les applications web sauf X » quand c'est plus court que la liste. */
-  const webRelevees = choisir(Object.entries(RELEVE.stockage).flatMap(([k, ids]) => (k === 'bureau' ? [] : ids)));
+  const webRelevees = choisir(
+    Object.entries(RELEVE.stockage).flatMap(([k, ids]) =>
+      k === 'bureau' || k === 'extensions' ? [] : ids
+    )
+  );
   const parmiLeWeb = ids => {
     const avec = new Set(ids);
     const sans = webRelevees.filter(a => !avec.has(a.id));
@@ -237,8 +242,9 @@ export function pageAPropos({ origine, compte, imagePartage, apps, avecIssues, s
   };
   const aussi = (ids, texte) => (choisir(ids).length ? texte : '');
 
-  const nbWeb = apps.filter(a => a.platform !== 'desktop').length;
+  const nbWeb = apps.filter(a => a.platform === 'web').length;
   const nbBureau = apps.filter(a => a.platform === 'desktop').length;
+  const nbExtensions = apps.filter(a => a.platform === 'extension').length;
   const nonRelevees = appsNonRelevees(apps);
 
   // Revenir sur son choix : ce que la page dit dépend du relevé, application
@@ -282,7 +288,7 @@ export function pageAPropos({ origine, compte, imagePartage, apps, avecIssues, s
       }.`
     : '';
 
-  const { local, supabase, firebase, outils, bureau } = RELEVE.stockage;
+  const { local, supabase, firebase, outils, bureau, extensions } = RELEVE.stockage;
   const sections = [];
   if (choisir(local).length) {
     sections.push(`
@@ -330,6 +336,14 @@ export function pageAPropos({ origine, compte, imagePartage, apps, avecIssues, s
       <h3>Une application de bureau</h3>
       <p>${liens(bureau)} garde tout sur l’ordinateur : ses données dans une base locale, les clés d’API chiffrées par le trousseau du système. Elle n’appelle que les services dont elle suit la consommation, avec vos clés, et n’embarque ni mesure d’audience ni remontée d’erreurs.</p>`);
   }
+  if (choisir(extensions).length) {
+    const n = choisir(extensions).length;
+    sections.push(`
+      <h3>${n === 1 ? 'Une extension Firefox' : 'Des extensions Firefox'}</h3>
+      <p>${liens(extensions)} s’installent depuis Modules Firefox. ${
+        n === 1 ? 'Elle garde' : 'Elles gardent'
+      } réglages et données dans le navigateur ; aucune mesure d’audience, aucune publicité.</p>`);
+  }
   if (nonRelevees.length) {
     sections.push(`
       <p class="note">Pas encore relevées : ${enumere(nonRelevees.map(lien))}.</p>`);
@@ -373,7 +387,7 @@ export function pageAPropos({ origine, compte, imagePartage, apps, avecIssues, s
           <dt>Éditeur</dt>
           <dd>${echappeHtml(compte)}, alias GuiiuG</dd>
           <dt>Applications</dt>
-          <dd>${nbWeb} applications web installables${nbBureau ? ` et ${nbBureau === 1 ? 'une application' : `${nbBureau} applications`} de bureau` : ''}</dd>
+          <dd>${nbWeb} applications web installables${nbBureau ? ` et ${nbBureau === 1 ? 'une application' : `${nbBureau} applications`} de bureau` : ''}${nbExtensions ? ` et ${nbExtensions === 1 ? 'une extension' : `${nbExtensions} extensions`} Firefox` : ''}</dd>
           <dt>Code</dt>
           <dd>public sur <a href="https://github.com/${compte}">GitHub</a>, sous licence MIT</dd>
           <dt>Prix</dt>
