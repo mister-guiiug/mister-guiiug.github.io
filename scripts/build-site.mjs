@@ -729,6 +729,19 @@ copyFileSync(
   new URL('../static/apple-touch-icon.png', import.meta.url),
   join(SORTIE, 'apple-touch-icon.png')
 );
+// LES ICÔNES DES EXTENSIONS FIREFOX, servies par l'origine de la famille. Les
+// extensions n'ont pas de site Pages ; le catalogue du socle désignait leurs
+// icônes sur raw.githubusercontent.com, que la CSP des apps refuse en
+// `img-src` (« Nos autres applications » les montrait cassées, et la
+// vérification en ligne de mister-puzzle échouait, le 23/11/2026). Copies des
+// `extension/icons/icone.svg` des deux dépôts, à reprendre s'ils les changent.
+mkdirSync(join(SORTIE, 'icones'), { recursive: true });
+for (const nom of ['mister-no-noise.svg', 'mister-no-prices.svg']) {
+  copyFileSync(
+    new URL(`../static/icones/${nom}`, import.meta.url),
+    join(SORTIE, 'icones', nom)
+  );
+}
 
 // Recherche Ctrl+K : module vanilla du socle (+ compagnon hub), s'il est publié.
 if (command) {
